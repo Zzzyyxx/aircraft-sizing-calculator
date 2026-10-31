@@ -2,7 +2,7 @@
 rem ---------------------------------------------------------------------
 rem  Aircraft Sizing Calculator - environment check
 rem  Verifies Python / tkinter / program files / the calculation core and
-rem  writes the report to "环境报告.txt". Pure ASCII on purpose.
+rem  writes the report next to this script. Pure ASCII on purpose.
 rem ---------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"

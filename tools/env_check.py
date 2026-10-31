@@ -32,7 +32,10 @@ REQUIRED = [
 ]
 
 try:                                        # 控制台编码兜底，避免 GBK 下崩
-    sys.stdout.reconfigure(errors="replace")
+    if sys.stdout.isatty():
+        sys.stdout.reconfigure(errors="replace")      # 终端：跟随系统代码页
+    else:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")   # 重定向：写 UTF-8
 except Exception:                           # noqa: BLE001
     pass
 
