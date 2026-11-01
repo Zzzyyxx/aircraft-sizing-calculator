@@ -224,9 +224,17 @@ def compute_core(cfg):
     P0 = DB["power"][cfg["power"]]
     rho = rho_hw(I["h"])
     V = (I.get("V") or 0) / 3.6
-    Vc = (I.get("Vc") or 0) / 3.6
+    # 构型：fixedwing / multirotor / tiltrotor
+    # 倾转旋翼的悬停只是起降与转换，通常 1–2 min；持续垂直爬升是直升机指标，不该套在它头上。
+    kind = cfg.get("config") or "fixedwing"
     is_elec = cfg["power"] == "electric"
-    is_vtol = cfg.get("config") != "fixedwing"
+    is_vtol = kind != "fixedwing"
+    is_multi = kind == "multirotor"
+    is_tilt = kind == "tiltrotor"
+    Vc = float(I.get("Vc") or 0)            # 爬升率，m/s
+    if Vc <= 0.1:
+        Vc = 0.0
+    hTrans = float(I.get("hTrans") or 0)    # 倾转旋翼完成转换的高度，m
 
     fEf = fit_curve(DB["emptyFrac"][db_key(cfg)]["points"])
     LDf = fit_curve(DB["ld"][db_key(cfg)]["points"])
@@ -264,15 +272,43 @@ def compute_core(cfg):
         ph = (W ** 1.5 / math.sqrt(2 * rho * Arot) / FM * 1.10 / (etaP * etaT)) if is_vtol else 0.0
         pcr = W * V / (ld * etaP * etaT)
         pcl_inc = W * Vc / (etaP * etaT)
-        pc = (ph + pcl_inc) if is_vtol else (pcr + pcl_inc)
+        # 机翼模式爬升（固定翼 / 倾转旋翼转换之后）与直升机式垂直爬升（多旋翼）是两件事
+        pcl_fwd = pcr + pcl_inc
+        pcl_vt = ph + pcl_inc
+        pc = pcl_vt if is_multi else pcl_fwd
         ptr = ph * 1.15 if is_vtol else 0.0
-        ppk = max([v for v in (ph, pc, pcr, ptr) if v > 0] or [0])
+        if is_multi:
+            cases = (ph, pcl_vt, pcr)
+        elif is_tilt:
+            cases = (ph, ptr, pcl_fwd, pcr)
+        else:
+            cases = (pcl_fwd, pcr)
+        ppk = max([v for v in cases if v > 0] or [0])
+
+        # ---- 剖面时间：倾转旋翼只在起降时悬停，多旋翼把悬停当任务，固定翼没有
+        tCr = I["R"] * 1000 / V if V > 0 else 0.0
+        if is_tilt:
+            tHov = float(I.get("tHover") or 0) * 60.0            # 悬停 + 转换 + 进近，通常 1–2 min
+            tTrans = 20.0                                        # 转换段按 20 s 估
+            tClimb = max(0.0, I["h"] - hTrans) / Vc if Vc > 0 else 0.0
+            E_vtol = ph * tHov + ptr * tTrans
+            E_climb = pcl_fwd * tClimb
+        elif is_multi:
+            tHov = float(I.get("tHover") or 0) * 60.0
+            tTrans = 20.0
+            tClimb = I["h"] / Vc if Vc > 0 else 0.0
+            E_vtol = ph * tHov + ptr * tTrans
+            E_climb = pcl_vt * tClimb
+        else:
+            tHov = 0.0
+            tTrans = 0.0
+            tClimb = I["h"] / Vc if Vc > 0 else 0.0
+            E_vtol = 0.0
+            E_climb = pcl_fwd * tClimb
 
         fuel = batt = ff = 0.0
         if is_elec:
-            tCr = I["R"] * 1000 / V if V > 0 else 0
-            E = (ph * I.get("tHover", 0) * 60 + pcr * tCr + pc * 60 + ptr * 20
-                 + 40 * ((I.get("tHover", 0) * 60 if is_vtol else 0) + tCr)) / 3600.0
+            E = (E_vtol + E_climb + pcr * tCr + 40 * (tHov + tCr)) / 3600.0
             Et = E * (1 + reserve)
             m1 = Et / ((O.get("DoD") or 0.85) * (O.get("e_batt") or P0.get("e_batt", 180)))
             m2 = ppk / (O.get("p_batt") or 1000)
@@ -281,16 +317,16 @@ def compute_core(cfg):
             bsfc = (O.get("bsfc") or P0["bsfc"]) / 3.6e6
             lnR = (I["R"] * 1000) * G * bsfc / (etaP * ld)
             ffCruise = 1 - math.exp(-lnR)
-            Vcms = Vc
-            tClimb = (I["h"] / Vcms) if Vcms > 0.1 else 0.0
-            PclimbW = Wt * G * Vcms / (etaP * etaT)
-            fuelClimb = PclimbW * tClimb * bsfc
+            # 爬升油耗只计"把重量举上去"的那一份（势能项），与已验证的 9 架口径一致
+            fuelClimb = (Wt * G * Vc / (etaP * etaT)) * tClimb * bsfc
+            fuelVTOL = (E_vtol / 3.6e6) * bsfc
             fuelDescent = fDescent * ffCruise * Wt
             fuelTaxi = fTaxi * ffCruise * Wt
             reserveHold = W * V / ld * 2700 * bsfc
             reservePct = 0.05 * ffCruise * Wt
             reserveFair = max(reserveHold, reservePct)
-            fuelTask0 = ffCruise * Wt + fuelClimb + fuelDescent + fuelTaxi + reserveFair
+            fuelTask0 = (ffCruise * Wt + fuelClimb + fuelVTOL + fuelDescent
+                         + fuelTaxi + reserveFair)
             bigCorr = (30000.0 / Wt) ** 0.20 if Wt > 30000 else 1.0
             fuel = fuelTask0 * bigCorr
             ff = fuel / Wt
@@ -367,6 +403,8 @@ def compute_core(cfg):
         "Phov": fin["ph"], "Pcl": fin["pc"], "Pcr": fin["pcr"], "Ppk": fin["ppk"],
         "Ptr": fin["ptr"], "Vstall": Vstall, "Vapp": Vapp,
         "CLc": CLc, "CLi": CLi, "isElec": is_elec, "isVTOL": is_vtol,
+        "isMulti": is_multi, "isTilt": is_tilt,
+        "tHoverMin": float(I.get("tHover") or 0), "hTrans": hTrans, "kind": kind,
         "AR": AR, "CLmax": CLmax, "etaP": etaP, "etaT": etaT, "FM": FM,
         "NB": NB, "D": Dr, "Arot": Arot, "reserve": reserve if is_elec else None,
         "solved": solved, "roots": roots, "V": V, "Vc": Vc,
@@ -543,8 +581,17 @@ def build_params(res, cfg):
             "桨盘面积 = 旋翼数 × π/4 × 桨径²", "A = N·π/4·D²")
         add("P_hover", "悬停功率", res["Phov"], "W", "calc",
             "动量理论 + 型阻修正", "P_hover = W^1.5/√(2ρA)/FM × 1.1", ["W_TO", "A_rotor", "FM"])
-        add("P_climb", "爬升功率", res["Pcl"], "W", "calc",
-            "悬停功率 + 爬升增量", "P_climb = P_hover + W·V_c/η", ["P_hover"])
+        if res.get("isMulti"):
+            add("P_climb", "垂直爬升功率", res["Pcl"], "W", "calc",
+                "悬停功率 + 竖直爬升增量", "P_climb = P_hover + W·V_c/η", ["P_hover"])
+        else:
+            add("P_climb", "机翼模式爬升功率", res["Pcl"], "W", "calc",
+                "转换完成后由机翼承重，按固定翼爬升算", "P_climb = P_cruise + W·V_c/η", ["P_cruise"])
+        if res.get("isTilt"):
+            add("t_hover", "悬停与过渡时间", res.get("tHoverMin", 0), "min", "input",
+                "起降悬停 + 转换 + 进近，倾转旋翼通常 1–2 min")
+            add("h_trans", "转换高度", res.get("hTrans", 0), "m", "input",
+                "从离地到完成倾转、进入机翼模式的高度")
     add("P_peak", "峰值功率", res["Ppk"], "W", "calc",
         "各剖面功率最大值", "P_peak = max(P_hover,P_climb,P_cruise,P_trans)")
     add("W/S", "翼载", res["WS"], "kg/m²", "input", "设计变量，在约束可行域内选")

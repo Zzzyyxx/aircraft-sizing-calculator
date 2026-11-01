@@ -1,9 +1,12 @@
 ﻿# -*- coding: utf-8 -*-
 """
-飞机总体参数计算器 · 桌面版 v4.5
+飞机Aircraft Sizing Calculator · 桌面版 v4.6
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
-v4.5：左栏加宽（470 px）、输入指引加实、样本页签补统计曲线图 + 样本点表、随程序附带分表排列的样本表 Excel
+v4.6：倾转旋翼按真实剖面建模——悬停只在起降与转换（悬停与过渡时间 1–2 min + 转换高度），
+      爬升改为转换后的机翼模式爬升，不再要求持续竖直爬升；多旋翼保留悬停时长与竖直爬升率。
+v4.5：随程序附带分表排列的样本点 Excel
+v4.4：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图与样本点表、可导出全部样本 CSV
 运行：python aircraft_sizing_calculator.py
 依赖：Python 3.9+（仅标准库 tkinter），计算内核见同目录 calc_core.py
 """
@@ -119,6 +122,8 @@ class Calculator:
         self.config = tk.StringVar(value="fixedwing")
         self.category = tk.StringVar(value="manned")
         self.vars: dict[str, tk.StringVar] = {}
+        self.row_labels: dict[str, object] = {}
+        self.row_hints: dict[str, object] = {}
         self.design_ws = tk.StringVar()
         self.design_wp = tk.StringVar()
         self.result = None
@@ -357,12 +362,15 @@ class Calculator:
         for i, (key, label, hint) in enumerate(rows):
             self._row(box, i, label, key, hint)
 
+        # 爬升率对三种构型都要用：固定翼 / 倾转旋翼是机翼模式爬升，多旋翼才是垂直爬升
+        self._row(box, len(rows), "爬升率 [m/s]", "inVC", "比如 5")
+
         self.vtol_frame = ttk.Frame(box, style="Panel.TFrame")
-        self.vtol_frame.grid(row=len(rows), column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.vtol_frame.grid(row=len(rows) + 1, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         self.vtol_frame.columnconfigure(2, weight=1)
         vrows = [
             ("inTH", "悬停时长 [min]", "比如 20"),
-            ("inVC", "垂直爬升率 [m/s]", "比如 3"),
+            ("inHT", "转换高度 [m]", "比如 50"),
             ("inNB", "旋翼数量", "比如 6"),
             ("inDr", "桨径 [m]", "比如 0.9"),
         ]
@@ -370,35 +378,47 @@ class Calculator:
             self._row(self.vtol_frame, i, label, key, hint)
 
         self.task_note = ttk.Label(box, text="", style="Hint.TLabel",
-                                   wraplength=340, justify="left")
-        self.task_note.grid(row=len(rows) + 1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+                                   wraplength=360, justify="left")
+        self.task_note.grid(row=len(rows) + 3, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         btn = ttk.Button(box, text="填入示例任务", command=self._fill_example)
-        btn.grid(row=len(rows) + 2, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        btn.grid(row=len(rows) + 4, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def _row(self, box, r, label, key, hint="", width=11):
-        ttk.Label(box, text=label, style="Panel.TLabel").grid(
-            row=r, column=0, sticky="w", pady=3, padx=(0, 8))
+        lb = ttk.Label(box, text=label, style="Panel.TLabel")
+        lb.grid(row=r, column=0, sticky="w", pady=3, padx=(0, 8))
         v = tk.StringVar()
         self.vars[key] = v
         ttk.Entry(box, textvariable=v, width=width).grid(
             row=r, column=1, sticky="w", pady=3)
         box.columnconfigure(1, minsize=int(96 * self.s))
+        self.row_labels[key] = lb
+        self.row_hints[key] = None
         if hint:
-            ttk.Label(box, text=hint, style="Hint.TLabel").grid(
-                row=r, column=2, sticky="w", padx=(10, 0))
+            hb = ttk.Label(box, text=hint, style="Hint.TLabel")
+            hb.grid(row=r, column=2, sticky="w", padx=(10, 0))
+            self.row_hints[key] = hb
         v.trace_add("write", lambda *_: self._schedule())
         return v
 
     def _fill_example(self):
-        vt = self.config.get() != "fixedwing"
-        if vt:
+        kind = self.config.get()
+        if kind == "tiltrotor":
+            # 倾转旋翼：悬停只在起降与转换，1–2 min；爬升是机翼模式
             ex = {"inWL": "3", "inV": "90", "inR": "30", "inH": "500",
-                  "inTH": "10", "inVC": "3", "inNB": "6", "inDr": "0.6"}
+                  "inTH": "1.5", "inHT": "50", "inNB": "6", "inDr": "0.6",
+                  "inVC": "5"}
+            self.category.set("uav")
+        elif kind == "multirotor":
+            ex = {"inWL": "3", "inV": "90", "inR": "30", "inH": "500",
+                  "inTH": "20", "inHT": "50", "inNB": "6", "inDr": "0.9",
+                  "inVC": "3"}
             self.category.set("uav")
         else:
             ex = {"inWL": "1500", "inV": "500", "inR": "1500", "inH": "8000",
-                  "inTH": "20", "inVC": "3", "inNB": "6", "inDr": "0.9"}
+                  "inTH": "20", "inHT": "50", "inNB": "6", "inDr": "0.9",
+                  "inVC": "5"}
+            self.category.set("manned")
         self._silent = True
         for k, v in ex.items():
             if k in self.vars:
@@ -699,7 +719,7 @@ class Calculator:
     # ------------------------------------------------------------ 初始值
     def _init_values(self):
         for k, v in {"inWL": "", "inV": "", "inR": "", "inH": "",
-                     "inTH": "20", "inVC": "3", "inNB": "6", "inDr": "0.9",
+                     "inTH": "1.5", "inHT": "50", "inVC": "5", "inNB": "6", "inDr": "0.9",
                      "inWS": "", "inAR": "", "inCLmax": "", "inEtaP": "", "inEtaT": "",
                      "inFM": "", "inVapp": "", "inGam": "", "inGamO": "", "inGamR": "",
                      "inTurn": "", "inSTO": "", "inSL": "", "inWind": "",
@@ -714,11 +734,38 @@ class Calculator:
         self._sync_vtol_visibility()
 
     def _sync_vtol_visibility(self):
-        vt = self.config.get() != "fixedwing"
+        kind = self.config.get()
+        vt = kind != "fixedwing"
+        tilt = kind == "tiltrotor"
         if vt:
             self.vtol_frame.grid()
         else:
             self.vtol_frame.grid_remove()
+        # 倾转旋翼：悬停只是起降与转换（1–2 min），另有转换高度；多旋翼才把悬停当任务
+        if tilt:
+            self.row_labels["inTH"].configure(text="悬停与过渡时间 [min]")
+            self.row_hints["inTH"].configure(text="比如 1.5")
+            self.row_labels["inHT"].grid()
+            self.row_hints["inHT"].grid()
+            self.row_labels["inVC"].configure(text="机翼模式爬升率 [m/s]")
+        elif vt:
+            self.row_labels["inTH"].configure(text="悬停时长 [min]")
+            self.row_hints["inTH"].configure(text="比如 20")
+            self.row_labels["inHT"].grid_remove()
+            self.row_hints["inHT"].grid_remove()
+            self.row_labels["inVC"].configure(text="垂直爬升率 [m/s]")
+        else:
+            self.row_labels["inVC"].configure(text="爬升率 [m/s]")
+        if tilt:
+            self.task_note.configure(
+                text="倾转旋翼只在起降与转换时悬停（一般 1–2 min）；转换完成后由机翼承重，"
+                     "爬升是机翼模式爬升。不设持续竖直爬升要求。")
+        elif vt:
+            self.task_note.configure(
+                text="多旋翼全程靠旋翼承重，悬停时长就是任务要求；爬升率即竖直爬升速率。")
+        else:
+            self.task_note.configure(
+                text="固定翼没有悬停段；爬升率只用于爬升油耗与爬升功率校核。")
         show_cat = self.layout.get() == "normal"
         if show_cat:
             self.cat_title.pack(anchor="w", pady=(12, 4))
@@ -742,13 +789,15 @@ class Calculator:
 
     def _current_cfg(self):
         vt = self.config.get() != "fixedwing"
+        tilt = self.config.get() == "tiltrotor"
         inp = {
             "WPL": self._num("inWL", 0.0),
             "V": self._num("inV", 0.0),
             "R": self._num("inR", 0.0),
             "h": self._num("inH", 0.0),
             "tHover": self._num("inTH", 0.0) if vt else 0.0,
-            "Vc": self._num("inVC", 0.0) if vt else 0.0,
+            "Vc": self._num("inVC", 0.0),
+            "hTrans": self._num("inHT", 0.0) if tilt else 0.0,
         }
         des = {}
         mapping = {
@@ -1350,7 +1399,7 @@ class Calculator:
             cfg = {"power": pw, "layout": "normal", "category": "manned",
                    "config": "fixedwing",
                    "inp": {"WPL": WPL, "V": V, "R": R, "h": h,
-                           "tHover": 0, "Vc": 11}, "des": {}}
+                           "tHover": 0, "Vc": 3.0556}, "des": {}}
             try:
                 rr = CC.compute_core(cfg)
                 pred = rr["Wto"]

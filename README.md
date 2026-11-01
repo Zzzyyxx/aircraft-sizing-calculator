@@ -1,4 +1,4 @@
-# Aircraft Sizing Calculator · 飞机总体参数计算器
+﻿# Aircraft Sizing Calculator · 飞机总体参数计算器
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](#2-快速开始--quick-start)
 [![tkinter](https://img.shields.io/badge/GUI-tkinter-16324f)](#3-界面--interface)
@@ -141,7 +141,7 @@ the app once everything passes. Machines without winget get manual python.org in
   ↓
 ① 重量—能量环：给定 W_TO 初值 → 分段能量/油耗 → 电池或燃油质量 → 空重 → 新 W_TO → 迭代至 0.5%
   ↓
-② 功率—翼载环：巡航 / 前飞爬升 / 悬停 / 垂直爬升 / OEI / 过渡 六类功率边界
+② 功率—翼载环：巡航 / 机翼模式爬升 / 悬停 / 过渡 / OEI / 转弯 等功率边界（倾转旋翼无持续垂直爬升）
   ↓
 ③ 升力系数下推：C_L_cruise → 机翼 C_L → 翼型 C_li → 净最大升力需求
   ↓
@@ -150,7 +150,7 @@ the app once everything passes. Machines without winget get manual python.org in
 
 English: statistics library → weight-and-energy loop (segmented energy or fuel burn → battery or
 fuel mass → empty weight → new gross weight, iterated to 0.5%) → power-and-wing-loading loop
-(six power boundaries) → lift-coefficient push-down → constraint chart and traceability.
+(power boundaries for cruise, wing-borne climb, hover, conversion, OEI and turn) → lift-coefficient push-down → constraint chart and traceability.
 
 燃油与电动的关键差别 / The key fuel-vs-electric difference：
 
@@ -166,7 +166,11 @@ fuel mass → empty weight → new gross weight, iterated to 0.5%) → power-and
 **必填 / Required**：载重 `W_PL` [kg]、巡航速度 `V` [km/h]、航程 `R` [km]、巡航高度 `h` [m]。
 
 **旋翼构型非固定翼时额外必填 / Extra for multirotor and tiltrotor**：
-悬停时长 [min]、垂直爬升率 [m/s]、旋翼数量、桨径 [m]。
+（倾转旋翼）悬停与过渡时间 [min]、转换高度 [m]；（多旋翼）悬停时长 [min]；旋翼数量、桨径 [m]。
+
+**爬升率 / Rate of climb [m/s]**（三种构型都填）：固定翼与倾转旋翼指**机翼模式爬升**，用于爬升油耗与爬升功率；多旋翼才指竖直爬升速率。
+悬停只是倾转旋翼的起降阶段，**不设持续竖直爬升要求**——转换完成后由机翼承重。把倾转旋翼当「能长时间悬停的直升机」定尺寸会大幅高估电池与峰值功率。
+Rate of climb applies to all three configurations: for fixed-wing and tiltrotor it means **wing-borne climb**; only a multirotor climbs vertically. A tiltrotor hovers just for take-off, conversion and landing (1–2 min), so it carries no sustained vertical-climb requirement.
 
 **可选约束 / Optional constraints**（留空即不考虑 / blank = not applied）：
 
@@ -175,7 +179,6 @@ fuel mass → empty weight → new gross weight, iterated to 0.5%) → power-and
 | 进场速度 | approach speed [km/h] | 留空 = 0.6·V |
 | 爬升梯度 | all-engines climb gradient [%] | 比如 5 |
 | 单发梯度 | one-engine-inoperative gradient [%] | 比如 2.4 |
-| 爬升率 | rate of climb [m/s] | 比如 5 |
 | 盘旋过载 | turning load factor | 比如 2.5 |
 | 起飞距离 | take-off distance [m] | 比如 600 |
 | 着陆距离 | landing distance [m] | 比如 900 |
