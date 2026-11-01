@@ -1,13 +1,15 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-飞机Aircraft Sizing Calculator · 桌面版 v4.6
+飞机总体参数计算器 · 桌面版 v4.7
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
+v4.7：按源码审查整改——单位只换算一次、无解不再输出指标、迭代表改真实二分记录、
+      能量剖面与重量闭合共用同一份数据、悬停功率去掉重复损失、极线按 L/D 反标定、验证改 9 架单点核对。
 v4.6：倾转旋翼按真实剖面建模——悬停只在起降与转换（悬停与过渡时间 1–2 min + 转换高度），
       爬升改为转换后的机翼模式爬升，不再要求持续竖直爬升；多旋翼保留悬停时长与竖直爬升率。
 v4.5：随程序附带分表排列的样本点 Excel
 v4.4：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图与样本点表、可导出全部样本 CSV
-运行：python aircraft_sizing_calculator.py
+运行：python 总体参数计算器.py
 依赖：Python 3.9+（仅标准库 tkinter），计算内核见同目录 calc_core.py
 """
 
@@ -464,6 +466,8 @@ class Calculator:
             ("inEtaP", "推进效率 η_prop", "比如 0.78"),
             ("inEtaT", "传动效率 η_trans", "比如 0.96"),
             ("inFM", "旋翼品质因数 FM", "比如 0.70"),
+            ("inAux", "机载设备功率 [W]", "比如 40"),
+            ("inKTrans", "过渡功率系数", "比如 1.15"),
         ]
         for i, (key, label, hint) in enumerate(rows):
             self._row(box, i, label, key, hint)
@@ -572,15 +576,36 @@ class Calculator:
             self.cards[n] = v
             self.card_titles[n] = t
 
-        ttk.Label(p, text="重量闭合迭代", style="H2.TLabel").pack(anchor="w", pady=(6, 4))
-        cols = ("k", "wto", "fe", "ld", "fuel", "conv")
-        self.itree = ttk.Treeview(p, columns=cols, show="headings", height=8)
-        for cid, txt, wd in (("k", "轮次", 60), ("wto", "总重 [kg]", 110),
-                             ("fe", "空重分数", 100), ("ld", "L/D", 80),
-                             ("fuel", "燃油/电池 [kg]", 130), ("conv", "收敛度", 100)):
+        bottom = ttk.Frame(p)
+        bottom.pack(fill="both", expand=True)
+        bottom.columnconfigure(0, weight=3)
+        bottom.columnconfigure(1, weight=2)
+        bottom.rowconfigure(1, weight=1)
+
+        ttk.Label(bottom, text="重量闭合迭代（扫描 + 二分，真实记录）",
+                  style="H2.TLabel").grid(row=0, column=0, sticky="w", pady=(6, 4))
+        ttk.Label(bottom, text="任务剖面能量（与重量计算同一份）",
+                  style="H2.TLabel").grid(row=0, column=1, sticky="w",
+                                          padx=(14, 0), pady=(6, 4))
+        cols = ("k", "wto", "fe", "ld", "fuel", "resid", "conv")
+        self.itree = ttk.Treeview(bottom, columns=cols, show="headings", height=9)
+        for cid, txt, wd in (("k", "轮次", 60), ("wto", "总重 [kg]", 88),
+                             ("fe", "空重分数", 76), ("ld", "L/D", 56),
+                             ("fuel", "燃油/电池 [kg]", 104),
+                             ("resid", "残差 [kg]", 76),
+                             ("conv", "区间半宽 [kg]", 84)):
             self.itree.heading(cid, text=txt)
             self.itree.column(cid, width=wd, anchor="e" if cid != "k" else "center")
-        self.itree.pack(fill="both", expand=True, pady=(0, 6))
+        self.itree.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
+
+        ecols = ("name", "pw", "t", "e")
+        self.etree = ttk.Treeview(bottom, columns=ecols, show="headings", height=9)
+        for cid, txt, wd in (("name", "段", 74), ("pw", "功率", 84),
+                             ("t", "时长 [s]", 72), ("e", "能量", 88)):
+            self.etree.heading(cid, text=txt)
+            self.etree.column(cid, width=wd,
+                              anchor="w" if cid == "name" else "e")
+        self.etree.grid(row=1, column=1, sticky="nsew", padx=(14, 0), pady=(0, 6))
 
     # ---- 约束边界
     def _build_cons_tab(self):
@@ -721,7 +746,8 @@ class Calculator:
         for k, v in {"inWL": "", "inV": "", "inR": "", "inH": "",
                      "inTH": "1.5", "inHT": "50", "inVC": "5", "inNB": "6", "inDr": "0.9",
                      "inWS": "", "inAR": "", "inCLmax": "", "inEtaP": "", "inEtaT": "",
-                     "inFM": "", "inVapp": "", "inGam": "", "inGamO": "", "inGamR": "",
+                     "inFM": "", "inAux": "", "inKTrans": "",
+                     "inVapp": "", "inGam": "", "inGamO": "", "inGamR": "",
                      "inTurn": "", "inSTO": "", "inSL": "", "inWind": "",
                      "inFE": "", "inLD": "", "inLDC": "",
                      "inEb": "", "inPb": "", "inDoD": "", "inBSFC": "", "inTaxi": "",
@@ -803,6 +829,7 @@ class Calculator:
         mapping = {
             "inWS": "WS", "inAR": "AR", "inCLmax": "CLmax", "inEtaP": "etaP",
             "inEtaT": "etaT", "inFM": "FM", "inNB": "NB", "inDr": "D",
+            "inAux": "P_aux", "inKTrans": "kTrans",
             "inVapp": "Vapp", "inGam": "gamma", "inGamO": "gammaOEI",
             "inGamR": "gammaRoute", "inTurn": "nTurn", "inSTO": "STO",
             "inSL": "SL", "inWind": "Vwind", "inFE": "fE", "inLD": "LD",
@@ -871,14 +898,16 @@ class Calculator:
     def _fill_result(self, r):
         if not r["solved"]:
             self.big_label.configure(text="无解", foreground=WARN_RED)
-            self.banner_sub.configure(text="重量闭合没有自洽解")
+            self.banner_sub.configure(text="重量闭合没有自洽解，以下结果全部无效")
             self.banner_note.configure(
-                text="悬停/巡航能量随总重涨得比燃油或电池质量快，迭代追不上。\n"
+                text="程序不再输出功率、面积、翼展等指标——它们都由未闭合的总重推出来，"
+                     "填进去会误当成方案。\n"
                      "可以试：加大桨径、缩短悬停时长、提高电池比能量，"
                      "或在 ⑧ 里填更确切的空重分数（比如 0.55）。")
             for lb in self.cards.values():
                 lb.configure(text="—", foreground=FG)
             self.itree.delete(*self.itree.get_children())
+            self.etree.delete(*self.etree.get_children())
             return
 
         self.big_label.configure(text=CC.fmt(r["Wto"], 0) + " kg", foreground=ACCENT)
@@ -922,7 +951,40 @@ class Calculator:
                 it["k"], CC.fmt(it["Wto"], 1), CC.fmt(it["fE"], 3),
                 CC.fmt(it["LD"], 2),
                 CC.fmt(it["mB"] if r["isElec"] else it["fuel"], 1),
-                "%.2f%%" % (it["conv"] * 100)))
+                CC.fmt(it.get("resid", 0.0), 3),
+                CC.fmt(it["conv"], 4)))
+
+        self.etree.delete(*self.etree.get_children())
+        if r["isElec"]:
+            self.etree.configure(displaycolumns=("name", "pw", "t", "e"))
+            self.etree.heading("pw", text="功率")
+            self.etree.heading("t", text="时长 [s]")
+            self.etree.heading("e", text="能量")
+            tot = 0.0
+            for name, pw, sec, note in r.get("profile") or []:
+                e = pw * sec / 3600.0
+                tot += e
+                self.etree.insert("", "end", values=(
+                    name, _pw(pw), CC.fmt(sec, 0), _en(e)))
+            m1 = r.get("mBattE") or 0.0
+            tail = "共 %s → 电池 %s kg" % (_en(tot), CC.fmt(r["mBatt"], 2))
+            self.etree.insert("", "end", values=(tail, "", "", _en(tot)))
+            if r.get("mBattP", 0) > m1 * 1.02:
+                self.etree.insert("", "end", values=(
+                    "电池质量由放电功率决定（峰值 %.1f kW），不是能量" % (r["Ppk"] / 1000),
+                    "", "", ""))
+        else:
+            self.etree.configure(displaycolumns=("name", "e"))
+            self.etree.heading("e", text="燃油 [kg]")
+            self.etree.column("name", width=220, anchor="w")
+            self.etree.column("e", width=110, anchor="e")
+            tot = 0.0
+            for name, kg in r.get("fuelSegs") or []:
+                tot += kg
+                self.etree.insert("", "end", values=(name, "", "", _kg(kg)))
+            self.etree.insert("", "end", values=(
+                "共 %s kg（占 %.1f%% 总重）" % (_kg(tot), 100 * tot / r["Wto"]),
+                "", "", _kg(tot)))
 
     def _fill_trace(self, r):
         self.ttree.delete(*self.ttree.get_children())
@@ -1420,16 +1482,25 @@ class Calculator:
         self.vtree.tag_configure("bad", foreground=WARN_RED)
         if errs:
             self.verify_note.configure(
-                text="%d 架平均绝对偏差 %.1f%%；15%% 以内 %d 架。两架偏差大的"
-                     "（PA-28、King Air）是空重分数曲线在低商载率处的固有偏差，"
-                     "不是数据点异常。" % (len(errs), sum(errs) / len(errs),
-                                        sum(1 for x in errs if x <= 15)))
+                text="%d 架平均绝对偏差 %.1f%%，15%% 以内 %d 架。\n"
+                     "每架都按它自己的载重、巡航速度、航程与高度算，只有空重分数与"
+                     "升阻比取自统计库——所以偏差归属统计曲线，不是参数抄错。\n"
+                     "两架偏大的（PA-28、King Air）分别是空重分数曲线偏低、商载率过低"
+                     "导致挑根偏离，样本点本身没错。\n"
+                     "这是单点核对，不是适航意义上的验证；不要把 15%% 当作合格线。"
+                     % (len(errs), sum(errs) / len(errs),
+                        sum(1 for x in errs if x <= 15)))
         else:
             self.verify_note.configure(text="验证未跑通")
 
     # ------------------------------------------------------------ 导出
     def _export_json(self):
         if not self.result:
+            return
+        if not self.result["solved"]:
+            messagebox.showwarning(
+                "无法导出", "重量闭合无解，当前这套数字不是方案，不做导出。\n"
+                            "先按结果页的提示调参，等到收敛再导出。")
             return
         path = filedialog.asksaveasfilename(
             defaultextension=".json", filetypes=[("JSON", "*.json")],
@@ -1449,6 +1520,11 @@ class Calculator:
     def _export_csv(self):
         if not self.result:
             return
+        if not self.result["solved"]:
+            messagebox.showwarning(
+                "无法导出", "重量闭合无解，参数溯源里的数值由未闭合的总重推出，"
+                            "不做导出。")
+            return
         path = filedialog.asksaveasfilename(
             defaultextension=".csv", filetypes=[("CSV", "*.csv")],
             initialfile="参数溯源_%s.csv" % datetime.now().strftime("%m%d_%H%M"))
@@ -1466,9 +1542,14 @@ class Calculator:
         messagebox.showinfo(
             "说明",
             "三环收敛：\n"
-            "① 重量—能量环：载重 + 空重 + 燃油/电池 = 总重，迭代到自洽\n"
-            "② 功率—翼载约束环：四条功率边界 + 失速边界切割可行域\n"
+            "① 重量—能量环：载重 + 空重 + 燃油/电池 = 总重，扫描找区间后二分收缩到自洽\n"
+            "② 功率—翼载约束环：功率边界 + 失速边界切割可行域，极线与 L/D 同源\n"
             "③ 升力系数下推：总重、翼载、速度 → 巡航 C_L → 翼型 C_li\n\n"
+            "任务剖面只算一份：悬停 → 过渡 → 机翼模式爬升 → 巡航 → 机载设备，\n"
+            "能量、燃油与界面上的剖面表共用同一组功率和时长。\n"
+            "倾转旋翼只在起降与转换时悬停（1–2 min 量级），爬升走机翼模式。\n\n"
+            "无解时不输出总重、功率、面积、翼展——那些数都由未闭合的总重推出来，\n"
+            "填进方案里容易被当成结果，导出也会被拦下。\n\n"
             "统计库全部为公开规格样本点，曲线严格穿过每个点。\n"
             "留空的输入项一律回落到库曲线或默认设计参数。")
 
@@ -1487,6 +1568,32 @@ def _vfmt(v):
     if isinstance(v, (int, float)):
         return CC.fmt(v, 0 if abs(v) >= 1000 else 2)
     return str(v)
+
+
+def _pw(v):
+    """功率按量级选单位：千瓦以上用 kW。"""
+    try:
+        return CC.fmt(v / 1000.0, 1) + " kW" if abs(v) >= 1000 else CC.fmt(v, 0) + " W"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _en(v):
+    """能量按量级选单位：千瓦时以上用 kWh。"""
+    try:
+        return CC.fmt(v / 1000.0, 1) + " kWh" if abs(v) >= 1000 else CC.fmt(v, 1) + " Wh"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _kg(v):
+    """小到零点几公斤的油量也要看得见有效位。"""
+    try:
+        if abs(v) < 1:
+            return CC.fmt(v, 3)
+        return CC.fmt(v, 1 if abs(v) >= 10 else 2)
+    except (TypeError, ValueError):
+        return "—"
 
 
 def _nice(v):

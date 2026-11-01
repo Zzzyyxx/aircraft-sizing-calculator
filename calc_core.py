@@ -257,7 +257,27 @@ def compute_core(cfg):
     fDescent = 0.03 if fDescent is None else fDescent
 
     WPL = I["WPL"]
-    res = {"warn": [], "iters": []}
+    res = {"warn": [], "iters": [], "profile": []}
+
+    # ---- 过渡段功率系数与机载设备功率：都是可核对的显式假设，不再是藏在公式里的常数
+    kTrans = 1.15 if O.get("kTrans") is None else float(O["kTrans"])
+    pAux = 40.0 if O.get("P_aux") is None else float(O["P_aux"])
+
+    # ---- 剖面时间：一次算好，能量、燃油、界面显示全部用它，不再各算一套
+    tCr = I["R"] * 1000 / V if V > 0 else 0.0
+    if is_tilt:
+        tHov = float(I.get("tHover") or 0) * 60.0     # 起降悬停 + 转换 + 进近，通常 1–2 min
+        tTrans = 20.0                                 # 转换段按 20 s 估
+        tClimb = max(0.0, I["h"] - hTrans) / Vc if Vc > 0 else 0.0
+    elif is_multi:
+        tHov = float(I.get("tHover") or 0) * 60.0
+        tTrans = 20.0
+        tClimb = I["h"] / Vc if Vc > 0 else 0.0
+    else:
+        tHov = 0.0
+        tTrans = 0.0
+        tClimb = I["h"] / Vc if Vc > 0 else 0.0
+    tMission = tHov + tTrans + tClimb + tCr
 
     def state(Wt):
         if O.get("fE"):
@@ -269,14 +289,16 @@ def compute_core(cfg):
         else:
             ld = max(4.0, LDf["predict"](Wt)) * (ldCruise if Wt < 30000 else 1.0)
         W = Wt * G
-        ph = (W ** 1.5 / math.sqrt(2 * rho * Arot) / FM * 1.10 / (etaP * etaT)) if is_vtol else 0.0
+        # 悬停功率：理想诱导功率 ÷ 品质因数 FM（FM 已含诱导 + 型阻损失），再除传动与电调效率。
+        # 悬停时旋翼不产生前飞推力，乘螺旋桨推进效率 η_prop 属于重复计入损失。
+        ph = (W ** 1.5 / math.sqrt(2 * rho * Arot) / FM / etaT) if is_vtol else 0.0
         pcr = W * V / (ld * etaP * etaT)
         pcl_inc = W * Vc / (etaP * etaT)
         # 机翼模式爬升（固定翼 / 倾转旋翼转换之后）与直升机式垂直爬升（多旋翼）是两件事
         pcl_fwd = pcr + pcl_inc
         pcl_vt = ph + pcl_inc
         pc = pcl_vt if is_multi else pcl_fwd
-        ptr = ph * 1.15 if is_vtol else 0.0
+        ptr = ph * kTrans if is_vtol else 0.0
         if is_multi:
             cases = (ph, pcl_vt, pcr)
         elif is_tilt:
@@ -285,53 +307,73 @@ def compute_core(cfg):
             cases = (pcl_fwd, pcr)
         ppk = max([v for v in cases if v > 0] or [0])
 
-        # ---- 剖面时间：倾转旋翼只在起降时悬停，多旋翼把悬停当任务，固定翼没有
-        tCr = I["R"] * 1000 / V if V > 0 else 0.0
-        if is_tilt:
-            tHov = float(I.get("tHover") or 0) * 60.0            # 悬停 + 转换 + 进近，通常 1–2 min
-            tTrans = 20.0                                        # 转换段按 20 s 估
-            tClimb = max(0.0, I["h"] - hTrans) / Vc if Vc > 0 else 0.0
-            E_vtol = ph * tHov + ptr * tTrans
-            E_climb = pcl_fwd * tClimb
-        elif is_multi:
-            tHov = float(I.get("tHover") or 0) * 60.0
-            tTrans = 20.0
-            tClimb = I["h"] / Vc if Vc > 0 else 0.0
-            E_vtol = ph * tHov + ptr * tTrans
-            E_climb = pcl_vt * tClimb
-        else:
-            tHov = 0.0
-            tTrans = 0.0
-            tClimb = I["h"] / Vc if Vc > 0 else 0.0
-            E_vtol = 0.0
-            E_climb = pcl_fwd * tClimb
+        # ---- 剖面：功率 × 时长 = 能量。界面与重量闭合共用这张表
+        segs = []
+        if is_vtol and ph > 0 and tHov > 0:
+            segs.append(("悬停", ph, tHov, "起降悬停与进近"))
+        if is_vtol and ptr > 0 and tTrans > 0:
+            segs.append(("过渡", ptr, tTrans, "≈%.2f×悬停功率" % kTrans))
+        if pc > 0 and tClimb > 0:
+            segs.append(("爬升", pc, tClimb,
+                         "竖直爬升" if is_multi else "机翼模式爬升"))
+        if pcr > 0 and tCr > 0:
+            segs.append(("巡航", pcr, tCr, "重量×速度÷(L/D×效率)"))
+        if pAux > 0 and tMission > 0:
+            segs.append(("机载设备", pAux, tMission, "航电/任务载荷常开"))
+        E_task_Wh = sum(p * t for _, p, t, _ in segs) / 3600.0
 
         fuel = batt = ff = 0.0
         if is_elec:
-            E = (E_vtol + E_climb + pcr * tCr + 40 * (tHov + tCr)) / 3600.0
-            Et = E * (1 + reserve)
+            Et = E_task_Wh * (1 + reserve)
             m1 = Et / ((O.get("DoD") or 0.85) * (O.get("e_batt") or P0.get("e_batt", 180)))
             m2 = ppk / (O.get("p_batt") or 1000)
             batt = max(m1, m2)
         else:
-            bsfc = (O.get("bsfc") or P0["bsfc"]) / 3.6e6
+            bsfc = (O.get("bsfc") or P0["bsfc"]) / 3.6e6      # kg/J
             lnR = (I["R"] * 1000) * G * bsfc / (etaP * ld)
             ffCruise = 1 - math.exp(-lnR)
             # 爬升油耗只计"把重量举上去"的那一份（势能项），与已验证的 9 架口径一致
             fuelClimb = (Wt * G * Vc / (etaP * etaT)) * tClimb * bsfc
-            fuelVTOL = (E_vtol / 3.6e6) * bsfc
+            fuelVTOL = (ph * tHov + ptr * tTrans) * bsfc       # J × kg/J
+            fuelAux = pAux * tMission * bsfc
             fuelDescent = fDescent * ffCruise * Wt
             fuelTaxi = fTaxi * ffCruise * Wt
             reserveHold = W * V / ld * 2700 * bsfc
             reservePct = 0.05 * ffCruise * Wt
             reserveFair = max(reserveHold, reservePct)
-            fuelTask0 = (ffCruise * Wt + fuelClimb + fuelVTOL + fuelDescent
-                         + fuelTaxi + reserveFair)
+            fuelTask0 = (ffCruise * Wt + fuelClimb + fuelVTOL + fuelAux
+                         + fuelDescent + fuelTaxi + reserveFair)
             bigCorr = (30000.0 / Wt) ** 0.20 if Wt > 30000 else 1.0
             fuel = fuelTask0 * bigCorr
             ff = fuel / Wt
+            # 燃油剖面：与重量闭合用的是同一批项，逐条相加就等于 fuel
+            fsegs = []
+            if fuelVTOL > 0:
+                if is_tilt and ph * tHov > 0 and ptr * tTrans > 0:
+                    fsegs.append(("悬停", ph * tHov * bsfc))
+                    fsegs.append(("过渡", ptr * tTrans * bsfc))
+                else:
+                    fsegs.append(("悬停/过渡", fuelVTOL))
+            if fuelClimb > 0:
+                fsegs.append(("爬升", fuelClimb))
+            fsegs.append(("巡航", ffCruise * Wt))
+            if fuelAux > 0:
+                fsegs.append(("机载设备", fuelAux))
+            if fuelDescent > 0:
+                fsegs.append(("下降", fuelDescent))
+            if fuelTaxi > 0:
+                fsegs.append(("滑行", fuelTaxi))
+            if reserveFair > 0:
+                fsegs.append(("备份", reserveFair))
+            if bigCorr != 1.0:
+                fsegs.append(("大机修正 ×%.2f" % bigCorr,
+                              (bigCorr - 1.0) * fuelTask0))
         return {"fe": fe, "ld": ld, "ph": ph, "pc": pc, "pcr": pcr, "ptr": ptr,
-                "ppk": ppk, "fuel": fuel, "batt": batt, "ff": ff}
+                "ppk": ppk, "fuel": fuel, "batt": batt, "ff": ff,
+                "segs": segs, "E_Wh": E_task_Wh,
+                "fsegs": fsegs if not is_elec else None,
+                "Et": Et if is_elec else 0.0,
+                "m1": m1 if is_elec else 0.0, "m2": m2 if is_elec else 0.0}
 
     def resid(Wt):
         s = state(Wt)
@@ -339,6 +381,7 @@ def compute_core(cfg):
 
     # 多根扫描：插值曲线非单调时 resid 可能有多个零点
     roots = []
+    brackets = []
     prevW = WPL * 1.02
     prevR = resid(prevW)
     w = WPL * 1.06
@@ -353,6 +396,7 @@ def compute_core(cfg):
                 else:
                     a = m
             roots.append((a + b) / 2)
+            brackets.append((prevW, w))
         prevW, prevR = w, rr
         w *= 1.06
 
@@ -360,7 +404,7 @@ def compute_core(cfg):
     Wto = WPL / 0.45
     if not roots:
         res["warn"].append("重量闭合无解：在载重的 1–60 倍范围内找不到自洽总重")
-        # 兜底：找一个残差最小的点
+        # 兜底：找一个残差最小的点（结果标记为无效，不当作方案）
         best, bestv = WPL / 0.45, 1e18
         w = WPL * 1.1
         while w <= WPL * 40:
@@ -375,14 +419,23 @@ def compute_core(cfg):
         target = 0.38 if (cfg["layout"] == "normal" and cfg.get("category") == "uav") else 0.22
         Wto = min(pool, key=lambda x: abs(WPL / x - target))
         solved = True
-        for k in range(8):
-            Wk = Wto * (1 - 0.5 * (0.5 ** k))
-            st = state(Wk)
+        # 求解记录：把二分法真实的区间收缩过程记下来（不是围绕结果编的数字）
+        idx = roots.index(Wto) if Wto in roots else 0
+        a, b = brackets[idx]
+        for k in range(1, 13):
+            m = (a + b) / 2
+            rm = resid(m)
+            st = state(m)
             res["iters"].append({
-                "k": k + 1, "Wto": Wk, "fE": st["fe"], "LD": st["ld"],
-                "fuel": st["fuel"], "mB": st["batt"], "Wn": Wto,
-                "conv": abs(Wto - Wk) / Wto,
+                "k": k, "Wto": m, "fE": st["fe"], "LD": st["ld"],
+                "fuel": st["fuel"], "mB": st["batt"],
+                "conv": abs(b - a) / 2.0,
+                "resid": rm,
             })
+            if resid(m) * resid(a) <= 0:
+                b = m
+            else:
+                a = m
 
     fin = state(Wto)
     fE, LD = fin["fe"], fin["ld"]
@@ -407,10 +460,16 @@ def compute_core(cfg):
         "tHoverMin": float(I.get("tHover") or 0), "hTrans": hTrans, "kind": kind,
         "AR": AR, "CLmax": CLmax, "etaP": etaP, "etaT": etaT, "FM": FM,
         "NB": NB, "D": Dr, "Arot": Arot, "reserve": reserve if is_elec else None,
-        "solved": solved, "roots": roots, "V": V, "Vc": Vc,
+        "solved": solved, "valid": solved, "roots": roots, "V": V, "Vc": Vc,
         "fits": {"fE": fEf, "LD": LDf},
         "bsfc": (O.get("bsfc") or P0["bsfc"]) if not is_elec else None,
         "P0": P0, "iters": res["iters"], "warn": res["warn"],
+        # 剖面：与重量闭合同一套数字，界面直接展示，不再另算
+        "profile": fin["segs"], "E_task": fin["E_Wh"] if is_elec else None,
+        "fuelSegs": fin["fsegs"], "Et": fin["Et"],
+        "mBattE": fin["m1"], "mBattP": fin["m2"],
+        "P_aux": pAux, "kTrans": kTrans,
+        "tSeg": {"hover": tHov, "trans": tTrans, "climb": tClimb, "cruise": tCr},
     }
     r["constraints"] = build_constraints(r, cfg)
     r["params"] = build_params(r, cfg)
@@ -428,13 +487,23 @@ def build_constraints(res, cfg):
     CLmax = O.get("CLmax") or 1.4
     etaP = O.get("etaP") or 0.78
     etaT = O.get("etaT") or 0.96
-    Cd0 = O.get("Cd0") or 0.015
     ARc = O.get("AR") or 6
     eO = O.get("eOswald") or 0.85
     W = Wto * G
     out = []
     if Wto <= 0 or V <= 0:
         return out
+
+    # 把阻力极线标定到重量闭合用的升阻比上：在设计翼载处极线给出的 L/D 与统计 L/D 相等，
+    # 这样约束图与重量闭合用的是同一套阻力模型（此前是两套，图上可行不等于闭合可行）。
+    CLd = 2 * res["WS"] * G / (rho * V * V) if res["WS"] > 0 else 0.3
+    cdInd = CLd * CLd / (math.pi * eO * ARc)
+    Cd0 = O.get("Cd0")
+    if Cd0 is None:
+        Cd0 = CLd / max(2.0, res["LD"]) - cdInd
+        Cd0 = max(0.006, min(0.08, Cd0))
+    res["Cd0"] = Cd0
+    res["CLd"] = CLd
 
     def p_cruise(ws):
         S = Wto / ws
@@ -491,7 +560,8 @@ def build_constraints(res, cfg):
 
     if res["isVTOL"]:
         hline("hover", "悬停", res["Phov"], "#5fbf8f", "悬停功率")
-        hline("trans", "过渡", res["Phov"] * 1.15, "#c9a227", "倾转过渡段")
+        hline("trans", "过渡", res["Ptr"], "#c9a227",
+              "倾转过渡段（%.2f×悬停功率）" % res.get("kTrans", 1.15))
         if O.get("Vwind"):
             Vw = O["Vwind"] * 0.5144
             hline("wind", "抗风 %g kt" % O["Vwind"],
@@ -555,11 +625,13 @@ def build_params(res, cfg):
 
     add("W_PL", "任务载重", I["WPL"], "kg", "input", "任务要求")
     add("W_TO", "起飞总重", res["Wto"], "kg", "calc",
-        "三环收敛后的总重", "W_TO = W_PL + W_E + m_batt", ["W_PL", "f_E", "m_batt"])
+        "三环收敛后的总重；无解时该值无效",
+        "W_TO = W_PL + W_E + m_batt", ["W_PL", "f_E", "m_batt"])
     add("f_E", "空重分数", res["fE"], "—", "stat",
-        "空重 ÷ 起飞总重，按重量库插值", "f_E(W_TO)", ["W_TO"])
+        "空重 ÷ 起飞总重。样本口径：OEW/MTOW，不含燃油与电池；若方案把电池计入结构重，需自行扣减",
+        "f_E(W_TO)", ["W_TO"])
     add("L/D", "升阻比", res["LD"], "—", "stat",
-        "库值 × 巡航系数（30 t 以下）", "L/D(W_TO)×0.85", ["W_TO"])
+        "库值 × 巡航系数（30 t 以下）；约束图的阻力极线按此值标定", "L/D(W_TO)×0.85", ["W_TO"])
     add("W_E", "空重", res["WE"], "kg", "calc", "空重 = 空重分数 × 起飞总重",
         "W_E = f_E·W_TO", ["f_E", "W_TO"])
     if res["isElec"]:
@@ -580,7 +652,11 @@ def build_params(res, cfg):
         add("A_rotor", "总桨盘面积", res["Arot"], "m²", "calc",
             "桨盘面积 = 旋翼数 × π/4 × 桨径²", "A = N·π/4·D²")
         add("P_hover", "悬停功率", res["Phov"], "W", "calc",
-            "动量理论 + 型阻修正", "P_hover = W^1.5/√(2ρA)/FM × 1.1", ["W_TO", "A_rotor", "FM"])
+            "动量理论理想功率 ÷ 品质因数（FM 已含诱导与型阻损失）÷ 传动电调效率",
+            "P_hover = W^1.5/√(2ρA)/FM/η_trans", ["W_TO", "A_rotor", "FM"])
+        add("P_trans", "过渡功率", res["Ptr"], "W", "calc",
+            "倾转过渡段功率，按悬停功率乘过渡系数（假设值，可按构型标定）",
+            "P_trans = %.2f×P_hover" % res.get("kTrans", 1.15), ["P_hover"])
         if res.get("isMulti"):
             add("P_climb", "垂直爬升功率", res["Pcl"], "W", "calc",
                 "悬停功率 + 竖直爬升增量", "P_climb = P_hover + W·V_c/η", ["P_hover"])
@@ -592,6 +668,12 @@ def build_params(res, cfg):
                 "起降悬停 + 转换 + 进近，倾转旋翼通常 1–2 min")
             add("h_trans", "转换高度", res.get("hTrans", 0), "m", "input",
                 "从离地到完成倾转、进入机翼模式的高度")
+    add("P_aux", "机载设备功率", res.get("P_aux", 40.0), "W", "assume",
+        "航电与任务载荷常开功率，全程计入能量；默认 40 W，可在设计参数里改")
+    if res["isElec"]:
+        add("E_task", "任务能量", res.get("E_task") or 0, "Wh", "calc",
+            "各段功率×时长之和（含机载设备），与剖面表逐行对应",
+            "E = Σ P_i·t_i", ["P_hover", "P_cruise", "P_aux"])
     add("P_peak", "峰值功率", res["Ppk"], "W", "calc",
         "各剖面功率最大值", "P_peak = max(P_hover,P_climb,P_cruise,P_trans)")
     add("W/S", "翼载", res["WS"], "kg/m²", "input", "设计变量，在约束可行域内选")

@@ -139,18 +139,22 @@ the app once everything passes. Machines without winget get manual python.org in
   ↓
 ④ 统计选库（空重分数 f_E、升阻比 L/D 随总重的经验曲线）
   ↓
-① 重量—能量环：给定 W_TO 初值 → 分段能量/油耗 → 电池或燃油质量 → 空重 → 新 W_TO → 迭代至 0.5%
+① 重量—能量环：同一份任务剖面（悬停 → 过渡 → 机翼模式爬升 → 巡航 → 机载设备）
+   算出能量/油耗 → 电池或燃油质量 → 空重 → 新 W_TO → 扫描找区间 + 二分收缩
   ↓
-② 功率—翼载环：巡航 / 机翼模式爬升 / 悬停 / 过渡 / OEI / 转弯 等功率边界（倾转旋翼无持续垂直爬升）
+② 功率—翼载环：巡航 / 机翼模式爬升 / 悬停 / 过渡 / OEI / 转弯 等功率边界（倾转旋翼无持续垂直爬升）；
+   阻力极线的零升阻力按重量闭合用的 L/D 反标定
   ↓
 ③ 升力系数下推：C_L_cruise → 机翼 C_L → 翼型 C_li → 净最大升力需求
   ↓
 约束边界图 + 参数溯源
 ```
 
-English: statistics library → weight-and-energy loop (segmented energy or fuel burn → battery or
-fuel mass → empty weight → new gross weight, iterated to 0.5%) → power-and-wing-loading loop
-(power boundaries for cruise, wing-borne climb, hover, conversion, OEI and turn) → lift-coefficient push-down → constraint chart and traceability.
+English: statistics library → weight-and-energy loop on **one shared mission profile** (hover →
+conversion → wing-borne climb → cruise → avionics load) producing battery or fuel mass, iterated by
+bracketing plus bisection → power-and-wing-loading loop (power boundaries for cruise, wing-borne climb,
+hover, conversion, OEI and turn; the drag polar's zero-lift drag is back-calibrated to the L/D used by
+the weight loop) → lift-coefficient push-down → constraint chart and traceability.
 
 燃油与电动的关键差别 / The key fuel-vs-electric difference：
 
@@ -184,7 +188,8 @@ Rate of climb applies to all three configurations: for fixed-wing and tiltrotor 
 | 着陆距离 | landing distance [m] | 比如 900 |
 | 逆风 | headwind [kt] | 比如 10 |
 
-**设计参数 / Design parameters**：翼载 W/S、展弦比、C_Lmax、螺旋桨效率、传动效率、旋翼品质因数。
+**设计参数 / Design parameters**：翼载 W/S、展弦比、C_Lmax、螺旋桨效率、传动效率、旋翼品质因数、
+机载设备功率 [W]（航电与任务载荷的常开功率，默认 40 W）、过渡功率系数（默认 1.15，只对倾转旋翼有效）。
 留空则按统计默认。
 
 **统计覆盖 / Statistics override**：空重分数、升阻比、巡航 L/D 折减（默认 0.85，把库里的 L/Dmax 折到设计巡航点）。
@@ -195,20 +200,26 @@ Rate of climb applies to all three configurations: for fixed-wing and tiltrotor 
 
 | 输出 | 含义 |
 |---|---|
-| W_TO | 起飞总重 [kg]，正反馈收敛值 |
+| W_TO | 起飞总重 [kg]，扫描 + 二分找到的自洽解 |
 | 空重 / 燃油 / 电池 | 三者的质量分配 |
 | 巡航功率 / 峰值功率 | 巡航需用功率、各工况最大需用功率 [kW] |
+| 悬停 / 过渡功率 | 悬停 `W^1.5/√(2ρA)/FM/η_trans`，过渡 = 系数 × 悬停 |
+| 任务能量 E_task | Σ(段功率 × 段时长)，与重量闭合同一份剖面 |
+| 剖面表 / 燃油分配 | 悬停 / 过渡 / 爬升 / 巡航 / 机载设备 各段功率、时长、能量；燃油机逐项相加等于总燃油 |
+| 迭代表 | 真实二分 12 轮：总重、空重分数、L/D、燃油或电池、残差 [kg]、区间半宽 [kg] |
 | 机翼面积 / 翼展 | S = W_TO/(W/S)，b = √(AR·S) |
 | 失速速度 / 进场速度 | V_s = √(2W/(ρSC_Lmax))，V_app |
 | 巡航 C_L / 翼型 C_li | 翼型筛选入口的设计升力系数 |
 | 升阻比 / 空重分数 | 实际用到的统计值 |
 
 「无解」的含义 / What "no solution" means：在当前桨径、悬停时长、电池比能量下，空重 + 能源 + 载重
-已经超过设计点，重量方程没有自洽解。界面会给出四个可调方向（加大桨径 / 缩短悬停 /
-提高电池比能量 / 填更确切的空重分数）。
+已经超过设计点，重量方程没有自洽解。**此时程序只报无解，不再输出总重、功率、面积、翼展等指标**——
+它们都由未闭合的总重推出来，填进去会被误当成方案；导出（JSON / CSV / 文本）也会被拦下。
+界面会给出四个可调方向（加大桨径 / 缩短悬停 / 提高电池比能量 / 填更确切的空重分数）。
 
-Under the current rotor diameter, hover time and battery specific energy, empty weight + energy +
-payload exceeds the design point, so the weight equation has no self-consistent root.
+When no self-consistent root exists the program reports **only that**, without printing gross weight,
+power, wing area or span, and blocks export — those numbers would all be derived from an unclosed
+gross weight.
 
 ---
 
@@ -271,21 +282,49 @@ Mean absolute error 7.4%; 7 of 9 within 15%.
 
 ---
 
+### 7.4 审查意见与处理 / Review findings and fixes
+
+v4.7 按一份针对本工具源码的审查报告逐条整改：
+
+| 审查意见 | 处理 |
+|---|---|
+| 单位换算前后矛盾：第六步航时按 km/h 算、第八步巡航升力系数直接吃 km/h 的 V | 速度只在入口换算一次 `V = V_kmh/3.6`，剖面、C_L、失速占比全部用 m/s；C_Lc 与参数总表共用同一个值 |
+| 重量闭合失败仍输出一套结果 | `solved=false` 时不再输出功率/面积/翼展；界面统一「无解」横幅，剖面、约束图、参数表的「计算」项一律 `—`，导出全部拦下 |
+| 展示的「迭代过程」是人为构造的 | 求解器记录真实扫描区间，再按二分过程逐轮记 12 条：`resid` [kg] 与 `conv`（区间半宽 [kg]）都是实际残差 |
+| 能量剖面与重量计算不一致（爬升 60 s vs 30 s、40 W 负载表里没有） | 剖面时间在 `state()` 外一次算好，能量、燃油、界面共用同一份；新增「机载设备」行，同一份剖面即电池/燃油质量来源（9 架逐架核对通过） |
+| 空重样本定义与适用性不清 | f_E 参数说明写明「样本口径 OEW/MTOW，不含燃油与电池」，样本表 `0 说明` 页同步 |
+| 倾转旋翼悬停功率重复计损失、过渡功率写死 1.15 | 悬停改为 `W^1.5/√(2ρA)/FM/η_trans`（去掉 ×1.10 与 ÷η_prop）；过渡系数与转换高度变成可覆盖参数 |
+| 约束图的阻力极线与重量闭合并未联立 | `Cd0 = C_Ld/(L/D) − C_Ld²/(πeAR)`，两条线出自同一个 L/D |
+| 「模型验证」只换载重，不能验证模型 | 验证页改为 9 架固定样本，各自带入载重、速度、航程、高度与动力类型，并声明「单点核对，不是适航验证」 |
+
+**回归 / Regression**：固定翼 9 架结果与改前逐位一致（−4.8 / −18.7 / −4.8 / −8.7 / +4.7 / −19.9 /
+−0.9 / +2.8 / +1.4，平均 7.4%、15% 内 7/9）；网页版与桌面版内核逐位一致。
+
+---
+
 ## 8. 已知限制 / Known limitations
 
 1. **低商载率机型会挑错根**。求解器按典型载荷分数选解，King Air 350 这类载荷分数只有 0.094
-   的机型会落到另一个假根上（−19.9%）。
+   的机型会落到另一个假根上（−19.9%）——这是求解器的已知取舍，不是数据问题。
 2. **统计库只到公开规格级**。C 级库（鸭翼/飞翼/连翼）样本 7–8 个，只适合看趋势。
 3. **电动只做能量与功率两项约束**，不含热管理、循环寿命、低温容量衰减。
-4. **不建模旋翼干扰、结构细节、配平**。约束图的可行域是必要条件，不是充分条件。
+4. **不建模旋翼干扰、结构细节、配平**。约束图的可行域是必要条件，不是充分条件；它现在与重量闭合
+   共用同一个 L/D，但仍不构成整机可行性证明。
 5. **升阻比取库值 × 0.85**（L/Dmax → 设计巡航点）。若目标机型以 L/Dmax 巡航，
    把统计覆盖里的 L/D 折减改成 1.0。
+6. **悬停功率的型阻修正并进 FM**。有实测悬停功率时，建议直接反推 FM，而不是再乘系数。
+7. **过渡段按固定 20 s、固定功率系数处理**，不区分构型的过渡曲线细节。
 
-1. Aircraft with a very low payload fraction may pick the wrong root (King Air 350, −19.9%).
+1. Aircraft with a very low payload fraction may pick the wrong root (King Air 350, −19.9%) — a solver
+   trade-off, not a data problem.
 2. Libraries only reach public-specification quality; C-grade ones carry 7–8 points and are trend-only.
 3. Electric sizing covers energy and power only — no thermal management, cycle life, or cold-capacity derating.
-4. Rotor interference, structural detail and trim are not modelled; the feasible region is necessary, not sufficient.
-5. L/D is taken as library value × 0.85 (L/Dmax → design cruise). Set the factor to 1.0 if your aircraft cruises at L/Dmax.
+4. Rotor interference, structural detail and trim are not modelled; the feasible region is necessary, not
+   sufficient — it now shares the L/D of the weight loop but still does not prove vehicle feasibility.
+5. L/D is taken as library value × 0.85 (L/Dmax → design cruise). Set the factor to 1.0 if your aircraft
+   cruises at L/Dmax.
+6. The hover profile-drag correction is folded into FM; with measured hover power, back out FM instead.
+7. The conversion segment uses a fixed 20 s and a fixed power ratio.
 
 ---
 
@@ -342,3 +381,4 @@ Results are for conceptual studies only; use airworthiness-approved methods and 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
