@@ -1,14 +1,16 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-飞机总体参数计算器 · 桌面版 v4.2
+飞机总体参数计算器 · 桌面版 v4.3
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
-运行：python 总体参数计算器.py
+v4.3：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图
+运行：python aircraft_sizing_calculator.py
 依赖：Python 3.9+（仅标准库 tkinter），计算内核见同目录 calc_core.py
 """
 
 import csv
 import json
+import math
 import os
 import sys
 import traceback
@@ -38,6 +40,7 @@ BTN = "#ece6dc"         # 次要按钮
 BTN_HOVER = "#e1d8ca"
 SEL = "#e3ecf3"         # 表格选中行
 GRID = "#eee8dd"        # 图表网格线
+HINT = "#8a7355"        # 输入指引（米色底上的暖褐灰，比次要文字更实）
 
 APP_TITLE = "飞机总体参数计算器"
 
@@ -59,7 +62,7 @@ class ScrollFrame(ttk.Frame):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0, width=382)
+        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0, width=452)
         self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=self.vbar.set)
         self.vbar.pack(side="right", fill="y")
@@ -126,6 +129,10 @@ class Calculator:
         self._build_layout()
         self._init_values()
         self._refresh()
+        try:
+            self._run_verify()          # 预先填好 9 架验证表，页签不留白
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
 
         for delay in (150, 500, 1200):
             root.after(delay, self._refresh)
@@ -158,8 +165,8 @@ class Calculator:
         st.configure("TLabel", background=BG, foreground=FG)
         st.configure("Panel.TLabel", background=PANEL, foreground=FG)
         st.configure("Muted.TLabel", background=BG, foreground=MUTED)
-        st.configure("Hint.TLabel", background=PANEL, foreground=MUTED,
-                     font=self._font(11))
+        st.configure("Hint.TLabel", background=PANEL, foreground=HINT,
+                     font=self._font(12))
         st.configure("CardName.TLabel", background=CARD, foreground=MUTED,
                      font=self._font(11))
         st.configure("CardValue.TLabel", background=CARD, foreground=ACCENT)
@@ -219,12 +226,13 @@ class Calculator:
 
         body = ttk.Frame(self.root, padding=(18, 0, 18, 8))
         body.grid(row=1, column=0, sticky="nsew")
-        body.columnconfigure(0, weight=0, minsize=400)
+        body.columnconfigure(0, weight=0, minsize=470)
         body.columnconfigure(1, weight=1)
         body.rowconfigure(0, weight=1)
 
         left = ScrollFrame(body)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        self.sf = left
         right = ttk.Frame(body)
         right.grid(row=0, column=1, sticky="nsew")
 
@@ -235,8 +243,8 @@ class Calculator:
         self._build_right(right)
         self._build_actions(self.root)
 
-        self.root.geometry("1400x950+40+20")
-        self.root.minsize(1020, 660)
+        self.root.geometry("1480x960+30+20")
+        self.root.minsize(1100, 680)
 
     def _build_actions(self, parent):
         bar = ttk.Frame(parent, padding=(18, 0, 18, 12))
@@ -503,6 +511,8 @@ class Calculator:
             return
         if idx == 1:
             self._draw_constraints()
+        elif idx == 3:
+            self._draw_fit()
 
     # ---- 结果总览
     def _build_res_tab(self):
@@ -618,13 +628,35 @@ class Calculator:
         ttk.Button(head, text="跑一遍 9 架实机验证",
                    command=self._run_verify).pack(side="right")
 
+        # ---------------------------------------------------- 拟合曲线图
+        self.fit_kind = "fE"
+        card = tk.Frame(p, bg=CARD, highlightthickness=1, highlightbackground=SEP)
+        card.pack(fill="x", pady=(8, 6))
+        bar = tk.Frame(card, bg=CARD)
+        bar.pack(fill="x", padx=10, pady=(8, 0))
+        self.fit_btns = {}
+        for k, label in (("fE", "空重分数 f_E"), ("ld", "升阻比 L/D"),
+                         ("bsfc", "比油耗 BSFC"), ("pw", "功重比 P/m")):
+            b = tk.Button(bar, text=label, bd=0, relief="flat", cursor="hand2",
+                          font=self._font(11), padx=12, pady=4,
+                          command=lambda kk=k: self._fit_set_kind(kk))
+            b.pack(side="left", padx=(0, 7))
+            self.fit_btns[k] = b
+        self.fit_cap = ttk.Label(card, text="", style="CardName.TLabel",
+                                 wraplength=820, justify="left")
+        self.fit_cap.pack(anchor="w", padx=10, pady=(4, 0))
+        self.fit_cv = tk.Canvas(card, bg=CANVAS_BG, highlightthickness=0,
+                                height=int(228 * self.s))
+        self.fit_cv.pack(fill="x", padx=10, pady=(4, 10))
+        self.fit_cv.bind("<Configure>", lambda e: self._draw_fit())
+
         self.fit_label = ttk.Label(p, text="", style="Mono.TLabel",
                                    background=PANEL, justify="left",
-                                   wraplength=760)
-        self.fit_label.pack(fill="x", pady=(8, 8), ipady=8)
+                                   wraplength=820)
+        self.fit_label.pack(fill="x", pady=(4, 8), ipady=6)
 
         cols = ("name", "wpl", "real", "pred", "err")
-        self.vtree = ttk.Treeview(p, columns=cols, show="headings", height=8)
+        self.vtree = ttk.Treeview(p, columns=cols, show="headings", height=6)
         for cid, txt, wd in (("name", "机型", 180), ("wpl", "载重 [kg]", 110),
                              ("real", "真实总重 [kg]", 130), ("pred", "算出总重 [kg]", 130),
                              ("err", "偏差", 100)):
@@ -638,7 +670,7 @@ class Calculator:
         ttk.Label(p, text="数据来源", style="H2.TLabel").pack(anchor="w", pady=(6, 2))
         self.src_text = tk.Text(p, bg=CARD, fg=FG, borderwidth=0,
                                 highlightthickness=1, highlightbackground=SEP,
-                                wrap="word", height=6, font=self._font(11),
+                                wrap="word", height=5, font=self._font(11),
                                 padx=10, pady=6)
         self.src_text.pack(fill="x")
         self.src_text.configure(state="disabled")
@@ -738,6 +770,7 @@ class Calculator:
             self.itree.delete(*self.itree.get_children())
             self._fill_sources()
             self._draw_constraints()
+            self._draw_fit()
             if hasattr(self, "status"):
                 self.status.configure(text="等待任务条件")
             return
@@ -758,6 +791,7 @@ class Calculator:
         self._fill_fit(r)
         self._fill_sources()
         self._draw_constraints()
+        self._draw_fit()
         if hasattr(self, "status"):
             self.status.configure(text="W_TO %.0f kg　空重 %.0f kg　%s %.0f kg　%s" % (
                 r["Wto"], r["WE"], "电池" if r["isElec"] else "燃油",
@@ -864,6 +898,162 @@ class Calculator:
                         LD["n"], 10 ** LD["xmin"], 10 ** LD["xmax"],
                         CC.DB["emptyFrac"][key]["src"])
         self.fit_label.configure(text=txt)
+
+    # ---- 拟合曲线图（空重分数 / 升阻比 / 比油耗 / 功重比）
+    FIT_DEF = {
+        "fE":   dict(box="emptyFrac", xlabel="起飞总重 W_TO [kg]", ylabel="空重分数 f_E",
+                     unit="", fmt="{:.3f}"),
+        "ld":   dict(box="ld", xlabel="起飞总重 W_TO [kg]", ylabel="升阻比 L/D",
+                     unit="", fmt="{:.2f}"),
+        "bsfc": dict(box="power", xlabel="配平功率 [kW]", ylabel="比油耗 BSFC [kg/(kW·h)]",
+                     unit=" kg/(kW·h)", fmt="{:.3f}"),
+        "pw":   dict(box="power", xlabel="配平功率 [kW]", ylabel="功重比 P/m [kW/kg]",
+                     unit=" kW/kg", fmt="{:.2f}"),
+    }
+
+    def _fit_set_kind(self, kind):
+        self.fit_kind = kind
+        self._draw_fit()
+
+    def _fit_series(self):
+        """返回 (points, meta, 当前设计值 x, 当前设计值 y)"""
+        cfg = self._current_cfg()
+        kind = getattr(self, "fit_kind", "fE")
+        meta = dict(self.FIT_DEF[kind])
+        r = getattr(self, "result", None)
+        if kind in ("fE", "ld"):
+            key = CC.db_key(cfg)
+            src_box = CC.DB["emptyFrac" if kind == "fE" else "ld"]
+            d = src_box.get(key) or {}
+            pts = d.get("points") or []
+            meta["dbname"] = d.get("name") or (
+                (CC.DB["emptyFrac"].get(key) or {}).get("name", key))
+            meta["grade"] = d.get("grade", "?")
+            meta["src"] = d.get("src", "")
+            if r:
+                return pts, meta, r["Wto"], (r["fE"] if kind == "fE" else r["LD"])
+            return pts, meta, None, None
+        pkey = cfg.get("power") or "piston"
+        d = CC.DB["power"].get(pkey) or {}
+        pts = d.get("bsfcPts" if kind == "bsfc" else "pwPts") or []
+        meta["dbname"] = d.get("name", pkey)
+        meta["grade"] = d.get("grade", "?")
+        meta["src"] = d.get("src", "")
+        if r:
+            x = r["Pcr"] / 1000.0
+            fit = CC.fit_curve(pts)
+            y = fit["predict"](x) if fit.get("ok") and x > 0 else None
+            return pts, meta, x, y
+        return pts, meta, None, None
+
+    def _draw_fit(self):
+        cv = getattr(self, "fit_cv", None)
+        if cv is None:
+            return
+        cv.delete("all")
+        # 按钮选中态
+        for k, b in getattr(self, "fit_btns", {}).items():
+            on = (k == getattr(self, "fit_kind", "fE"))
+            b.configure(bg=ACCENT if on else BTN, fg="#ffffff" if on else FG,
+                        activebackground="#22456b" if on else BTN_HOVER,
+                        activeforeground="#ffffff" if on else FG)
+
+        pts, meta, xnow, ynow = self._fit_series()
+        cv.update_idletasks()
+        w = cv.winfo_width() or 800
+        h = cv.winfo_height() or 228
+        if w < 60 or h < 60:
+            return
+        padl, padr, padt, padb = 62, 26, 26, 34
+        x0, x1, y0, y1 = padl, w - padr, padt, h - padb
+        clean = [p for p in pts if p[0] > 0 and p[1] > 0]
+        if not clean:
+            cv.create_text(w / 2, h / 2, text="暂无样本", fill=MUTED,
+                           font=self._font(12))
+            return
+        lx = [math.log10(p[0]) for p in clean]
+        ys = [p[1] for p in clean]
+        lxmin, lxmax = min(lx), max(lx)
+        if lxmax - lxmin < 1e-6:
+            lxmax = lxmin + 1e-3
+        span = (lxmax - lxmin) * 0.06
+        lxmin -= span
+        lxmax += span
+        ymin, ymax = min(ys), max(ys)
+        if ynow is not None and math.isfinite(ynow) and ynow > 0:
+            ymin, ymax = min(ymin, ynow), max(ymax, ynow)
+        ypad = (ymax - ymin) * 0.14 or max(ymax * 0.1, 0.1)
+        ymin, ymax = ymin - ypad, ymax + ypad
+        if ymax - ymin < 1e-9:
+            ymax = ymin + 1
+
+        def X(v):
+            return x0 + (math.log10(max(v, 1e-9)) - lxmin) / (lxmax - lxmin) * (x1 - x0)
+
+        def Y(v):
+            return y1 - (v - ymin) / (ymax - ymin) * (y1 - y0)
+
+        # 网格与刻度
+        for i in range(5):
+            yy = y0 + (y1 - y0) * i / 4.0
+            cv.create_line(x0, yy, x1, yy, fill=GRID)
+            val = ymax - (ymax - ymin) * i / 4.0
+            cv.create_text(x0 - 8, yy, text=meta["fmt"].format(val), anchor="e",
+                           fill=MUTED, font=self._font(10))
+        for i in range(5):
+            xx = x0 + (x1 - x0) * i / 4.0
+            cv.create_line(xx, y0, xx, y1, fill=GRID)
+            val = 10 ** (lxmin + (lxmax - lxmin) * i / 4.0)
+            lab = "%d" % val if val >= 10 else "%.1f" % val
+            if val >= 10000:
+                lab = "%dk" % (val / 1000.0)
+            cv.create_text(xx, y1 + 12, text=lab, anchor="n",
+                           fill=MUTED, font=self._font(10))
+        cv.create_line(x0, y0, x0, y1, fill=SEP)
+        cv.create_line(x0, y1, x1, y1, fill=SEP)
+
+        # 拟合曲线
+        fit = CC.fit_curve(pts)
+        if fit.get("ok"):
+            xs = [lxmin + (lxmax - lxmin) * i / 120.0 for i in range(121)]
+            seq = []
+            for t in xs:
+                xv = 10 ** t
+                yv = fit["predict"](xv)
+                if math.isfinite(yv) and ymin - 1e9 < yv < ymax + 1e9:
+                    seq.extend((X(xv), Y(yv)))
+            if len(seq) >= 4:
+                cv.create_line(*seq, fill=ACCENT, width=2, smooth=False)
+
+        # 样本点
+        for p in clean:
+            px, py = X(p[0]), Y(p[1])
+            cv.create_oval(px - 3, py - 3, px + 3, py + 3,
+                           fill=ACCENT2, outline=CARD, width=1)
+
+        # 当前设计点
+        if xnow is not None and ynow is not None and xnow > 0 and ynow > 0:
+            if xnow < 10 ** lxmin or xnow > 10 ** lxmax:
+                pass
+            else:
+                px, py = X(xnow), Y(ynow)
+                cv.create_line(px, y0, px, y1, fill=ACCENT2, dash=(4, 4))
+                cv.create_oval(px - 5, py - 5, px + 5, py + 5,
+                               fill=CARD, outline=ACCENT2, width=2)
+                lab = ("当前设计 %.2f" % ynow) if ynow < 100 else ("当前设计 %.0f" % ynow)
+                tx = px + 9 if px < (x0 + x1) / 2 else px - 9
+                ty = py + 14 if py < (y0 + y1) / 2 else py - 14
+                cv.create_text(tx, ty, anchor="w" if tx > px else "e",
+                               fill=ACCENT2, font=self._font(10), text=lab)
+
+        cv.create_text(x0, 6, anchor="w", fill=FG, font=self._font(11),
+                       text=meta["ylabel"])
+        cv.create_text((x0 + x1) / 2, h - 6, anchor="s", fill=MUTED,
+                       font=self._font(10), text=meta["xlabel"])
+        if hasattr(self, "fit_cap"):
+            note = "%s　%d 个样本点　曲线：log-log 分段插值（穿过每个点）" % (
+                meta.get("dbname", ""), len(clean))
+            self.fit_cap.configure(text=note)
 
     # ---- 数据来源清单
     def _fill_sources(self):

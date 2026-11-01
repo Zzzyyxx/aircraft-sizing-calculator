@@ -126,7 +126,7 @@ the app once everything passes. Machines without winget get manual python.org in
 - **结果总览** — 总重、12 张参数卡、逐轮迭代表 / Gross weight, 12 cards, iteration table
 - **约束边界** — W/S–W/P 可行域图，点击或输入设计点 / Feasible-region chart, click or type a design point
 - **参数溯源** — 每个参数的公式、上游依赖、来源标签 / Formula, upstream dependencies, source tag for every parameter
-- **样本与验证** — 统计库、9 架实机一键复算、数据来源清单 / Statistics, 9-aircraft one-click verification, data sources
+- **样本与验证** — 统计曲线图（空重分数 / 升阻比 / 比油耗 / 功重比四选一，可切换）、9 架实机一键复算、数据来源清单 / Statistic curves (empty-weight fraction, L/D, BSFC, power-to-weight — switchable), 9-aircraft one-click verification, data sources
 
 底部操作条 / Bottom bar：重新计算 / Recompute、导出 JSON / Export JSON、导出 CSV / Export CSV、说明 / About，右侧实时状态 / live status。
 
