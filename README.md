@@ -1,4 +1,4 @@
-﻿# Aircraft Sizing Calculator · 飞机总体参数计算器
+# Aircraft Sizing Calculator · 飞机总体参数计算器
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](#2-快速开始--quick-start)
 [![tkinter](https://img.shields.io/badge/GUI-tkinter-16324f)](#3-界面--interface)
@@ -194,6 +194,16 @@ Rate of climb applies to all three configurations: for fixed-wing and tiltrotor 
 
 **统计覆盖 / Statistics override**：空重分数、升阻比、巡航 L/D 折减（默认 0.85，把库里的 L/Dmax 折到设计巡航点）。
 
+**电池口径 / Battery: two ways, pick one**（动力选「电机 + 电池」时出现）：
+
+| 口径 | 怎么填 | 换算 |
+|---|---|---|
+| 按参数 | 电池比能量 [Wh/kg] + 电池比功率 [W/kg] | 直接进重量闭合 |
+| 用我的电池包 | 标称电压 [V] + 额定容量 [Ah] + 整包质量 [kg] + 连续放电电流 [A] 或倍率 [C]（只填一个） | `E = V·Ah`、`e = E/m`、`P/m = V·I/m` |
+
+电池包口径当场显示换算结果；比能量超过 500 Wh/kg 会拒绝应用并提示检查容量单位（`10 Ah` 是不是该填 `mAh`）。电池质量仍取「能量需求」与「峰值功率」两者较大值。
+Multirotor vertical climb uses axial momentum theory, `P = T(V_c/2 + √(V_c²/4 + v_i²))/(FM·η)` with `v_i² = W/(2ρA)`; `V_c = 0` falls back to hover power plus the linear increment.
+
 ---
 
 ## 6. 输出说明 / Outputs
@@ -300,6 +310,22 @@ v4.7 按一份针对本工具源码的审查报告逐条整改：
 **回归 / Regression**：固定翼 9 架结果与改前逐位一致（−4.8 / −18.7 / −4.8 / −8.7 / +4.7 / −19.9 /
 −0.9 / +2.8 / +1.4，平均 7.4%、15% 内 7/9）；网页版与桌面版内核逐位一致。
 
+### 7.5 v4.8 参考件优化 / v4.8 refinements
+
+v4.8 参考一份「联翼垂起无人机」计算器的口径，补了三条：
+
+| 项 | 做法 | 效果 |
+|---|---|---|
+| 电池双口径 | `按参数`（比能量 Wh/kg + 比功率 W/kg）或 `用我的电池包`（电压 V × 容量 Ah → Wh，÷ 整包质量 → Wh/kg；电压 × 连续电流 → W/kg） | 手上有实物电池包时直接换算，比能量 >500 Wh/kg 会拒绝应用并提示检查 Ah/mAh |
+| 多旋翼竖直爬升 | 轴向动量理论 `P = T(V_c/2 + √(V_c²/4 + v_i²))/(FM·η)`，`v_i² = W/(2ρA)` | 大爬升率不再线性外推；`V_c = 0` 时退回悬停功率 + 功率增量 |
+| 多解提示 | 闭合解多于一个时列出前几个根并声明「不是唯一解」 | 求解器挑根这件事变得可见 |
+
+同一份任务下：倾转旋翼 + 电动（3 kg / 90 km/h / 30 km / 500 m / 悬停 1.5 min / 6×0.6 m）
+按参数口径算出 8.24 kg、电池 1.10 kg（180 Wh/kg）；换成 6S 10 Ah / 1.3 kg 电池包后
+8.43 kg、电池 1.19 kg（170.8 Wh/kg、1708 W/kg）——同一架飞机，两个口径差 0.19 kg。
+
+**Regression**：固定翼 9 架数值不变；倾转旋翼示例、多旋翼示例、无解基线三组行为与桌面版逐位一致。
+
 ---
 
 ## 8. 已知限制 / Known limitations
@@ -314,6 +340,8 @@ v4.7 按一份针对本工具源码的审查报告逐条整改：
    把统计覆盖里的 L/D 折减改成 1.0。
 6. **悬停功率的型阻修正并进 FM**。有实测悬停功率时，建议直接反推 FM，而不是再乘系数。
 7. **过渡段按固定 20 s、固定功率系数处理**，不区分构型的过渡曲线细节。
+8. **电池包口径不算电芯一致性、内阻与温升**，比功率按「标称电压 × 连续放电电流 ÷ 整包质量」估算，
+   是量级核对，不是放电能力验证。
 
 1. Aircraft with a very low payload fraction may pick the wrong root (King Air 350, −19.9%) — a solver
    trade-off, not a data problem.
@@ -325,6 +353,8 @@ v4.7 按一份针对本工具源码的审查报告逐条整改：
    cruises at L/Dmax.
 6. The hover profile-drag correction is folded into FM; with measured hover power, back out FM instead.
 7. The conversion segment uses a fixed 20 s and a fixed power ratio.
+8. Pack mode ignores cell matching, internal resistance and temperature rise; specific power (V × I ÷ mass)
+   is an order-of-magnitude check, not a discharge-capability proof.
 
 ---
 
@@ -341,6 +371,7 @@ v4.7 按一份针对本工具源码的审查报告逐条整改：
 | `tools/env_setup.py` | 修复建议 + 通过后启动计算器 / repair hints and launch |
 | `tools/export_samples.py` | 重新生成样本点工作簿（需 `openpyxl`，主程序不依赖） / regenerate the sample workbook |
 | `data/sample_points.xlsx` | 样本点数据表：七张分表，分门别类 / the sample workbook, seven sheets |
+| `web_sizing_calculator.html` | 网页版：单文件、双击即用，与桌面版同一套口径（v4.8） / single-file web build, same conventions |
 | `docs/` | 界面截图 / screenshots |
 | `README.md` | 本说明 / this manual |
 

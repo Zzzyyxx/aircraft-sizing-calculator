@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>飞机总体参数计算器 · 教具版</title>
+<style>
+:root{--navy:#16324f;--acc:#c05621;--acc2:#5b7c99;--ink:#1f2328;--sub:#6b7280;
+  --rule:#d8d2c8;--bg:#faf8f5;--panel:#f0ebe3;--fix:#9c3024;--good:#2f5d50;--white:#fff;
+  --shadow:0 2px 10px rgba(22,50,79,.08)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.65 "Microsoft YaHei","Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:50;background:var(--white);border-bottom:1px solid var(--rule);box-shadow:var(--shadow)}
+.hd{display:flex;align-items:center;gap:14px;padding:11px 22px;max-width:1320px;margin:0 auto}
+.hd h1{font-size:16.5px;margin:0;color:var(--navy);font-weight:700}
+.hd .rev{font:11px/1 Consolas,monospace;color:var(--sub);margin-left:auto}
+.steps{display:flex;gap:2px;padding:0 22px 9px;max-width:1320px;margin:0 auto;overflow-x:auto}
+.steps button{flex:1;min-width:86px;border:0;background:var(--panel);color:var(--sub);padding:7px 5px;font-size:11.5px;cursor:pointer;border-radius:6px 6px 0 0;white-space:nowrap}
+.steps button.on{background:var(--navy);color:#fff;font-weight:600}
+.steps button.done{background:#dbe4ea;color:var(--navy)}
+main{max-width:1320px;margin:0 auto;padding:20px 22px 110px}
+h2{font-size:18.5px;color:var(--navy);margin:0 0 3px}
+.hint{color:var(--sub);font-size:12.5px;margin-bottom:16px}
+.card{background:var(--white);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:13px;box-shadow:var(--shadow)}
+.card h3{font-size:14px;margin:0 0 11px;color:var(--navy);display:flex;align-items:center;gap:8px}
+.card h3 .tag{font:10px/1 Consolas,monospace;background:var(--acc);color:#fff;padding:3px 6px;border-radius:4px;font-weight:400}
+.grid{display:grid;gap:11px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.opt{border:1.5px solid var(--rule);border-radius:9px;padding:13px;cursor:pointer;background:var(--white);transition:.15s;position:relative}
+.opt:hover{border-color:var(--acc2);transform:translateY(-1px)}
+.opt.sel{border-color:var(--navy);background:#f4f7fa;box-shadow:inset 0 0 0 1px var(--navy)}
+.opt.sel::after{content:"✓";position:absolute;top:7px;right:9px;color:var(--navy);font-weight:700}
+.opt b{display:block;font-size:13.5px;margin-bottom:3px;color:var(--navy)}
+.opt span{font-size:11.5px;color:var(--sub);line-height:1.45}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11.5px;color:var(--sub)}
+.field label b{color:var(--ink);font-size:12.5px}
+.field input,.field select{padding:7px 9px;border:1px solid var(--rule);border-radius:7px;font-size:13px;background:var(--white);font-family:inherit;width:100%}
+.field input:focus,.field select:focus{outline:2px solid #b9c9d6;border-color:var(--acc2)}
+.field .unit{font-size:10.5px;color:var(--sub);text-align:right}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--rule)}
+th{background:var(--panel);color:var(--sub);font-weight:600;font-size:11.5px}
+td.num,th.num{text-align:right;font-family:Consolas,monospace}
+tr.total td{font-weight:700;background:#f4f7fa}
+.badge{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;font-weight:600}
+.b-stat{background:#e4efe9;color:var(--good)}.b-calc{background:#fbe9e2;color:var(--acc)}
+.b-in{background:#e3ecf4;color:var(--acc2)}.b-asm{background:#f6e3e0;color:var(--fix)}
+.b-spec{background:#eceae7;color:#555}
+.btn{padding:8px 18px;border:0;border-radius:8px;background:var(--navy);color:#fff;font-size:13px;cursor:pointer;font-family:inherit}
+.btn:hover{background:#1d4266}
+.btn.ghost{background:var(--white);color:var(--navy);border:1px solid var(--rule)}
+.btn.ghost:hover{background:var(--panel)}
+.btn.acc{background:var(--acc)}
+.nav{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--rule);padding:11px 22px;display:flex;gap:12px;justify-content:space-between;z-index:40}
+.nav .mid{font-size:12px;color:var(--sub);align-self:center}
+.chart{width:100%;max-width:680px;height:300px;display:block}
+.fitwrap{display:grid;grid-template-columns:1fr 340px;gap:15px}
+.note{font-size:11.5px;color:var(--sub);line-height:1.55;background:#fcfbf9;border-left:3px solid var(--rule);padding:8px 11px;border-radius:0 6px 6px 0}
+.warn{background:#fdf3ef;border-left-color:var(--fix);color:#7a2a1f}
+.warn b{color:var(--fix)}
+.ok{background:#eef6f1;border-left-color:var(--good);color:#1f4a3c}
+.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--rule);font-size:12.5px}
+.kv:last-child{border:0}
+.kv b{font-family:Consolas,monospace;color:var(--navy)}
+#tracePanel{position:fixed;right:-440px;top:0;width:420px;height:100vh;background:var(--white);border-left:1px solid var(--rule);box-shadow:-4px 0 20px rgba(0,0,0,.1);z-index:100;transition:.25s;overflow-y:auto;padding:20px}
+#tracePanel.open{right:0}
+#tracePanel h3{color:var(--navy);margin:0 0 5px;font-size:15.5px}
+#tracePanel .close{position:absolute;top:12px;right:14px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--sub)}
+.trace-sym{font:700 21px Consolas,monospace;color:var(--acc)}
+.trace-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--rule);font-size:12.5px}
+.trace-row span:first-child{color:var(--sub)}
+.trace-row span:last-child{text-align:right;font-family:Consolas,monospace}
+.fml{background:#f7f5f1;border-radius:6px;padding:9px 11px;margin:7px 0;font-size:12px;line-height:1.7}
+.fml .lbl{font-size:10.5px;color:var(--sub);font-weight:600;display:block}
+.fml .sym{font-family:Consolas,monospace;color:var(--navy);display:block;margin-top:4px}
+.dep{display:inline-block;margin:3px 4px 0 0;padding:3px 8px;background:#eef3f7;border-radius:5px;font-size:11.5px;cursor:pointer;font-family:Consolas,monospace}
+.dep:hover{background:#dce8f0}
+.clickable{cursor:pointer;border-bottom:1px dashed var(--acc);color:var(--acc)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--sub);margin-top:9px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+input[type=range]{width:100%}
+.sub2{font-size:11.5px;color:var(--sub)}
+@media print{header,.nav,#tracePanel,.btn{display:none!important}main{max-width:none;padding:0}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ccc}body{background:#fff}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hd"><h1>飞机总体参数计算器 · 教具版</h1><span class="rev" id="hdRev">v2.1 · 1 kg – 600 t</span></div>
+  <div class="steps" id="steps"></div>
+</header>
+<main id="main"></main>
+<div class="nav">
+  <button class="btn ghost" id="btnPrev">← 上一步</button>
+  <div class="mid" id="navMid"></div>
+  <button class="btn" id="btnNext">下一步 →</button>
+</div>
+<aside id="tracePanel"><button class="close" onclick="closeTrace()">×</button><div id="traceBody"></div></aside>
+
+<script>
+"use strict";
+const G = 9.80665, RHO0 = 1.225;
+const rhoHW = h => RHO0 * Math.pow(Math.max(0.05, 1 - 2.2557e-5*h), 4.2559);
+const fmt = (v,n=2) => (v==null||!isFinite(v)) ? "—" : (Math.abs(v)>=10000 ? v.toFixed(0) : v.toFixed(n));
+const fmtG = (v,n=3) => (v==null||!isFinite(v)) ? "—" : v.toPrecision(n);
+
+/* ============================================================
+   数据层 v2 —— 每库 ≥ 40 点，覆盖 0.9 kg – 575 t
+   ============================================================ */
+const DB = {
+  emptyFrac: {
+    normal_small_uav: { name:"常规 · 小型无人机", grade:"B",
+      src:"公开规格：DJI 系列 / 小型固定翼与多旋翼 UAV（<250 kg）；大型无人机真实样本不足 10 个，未建库",
+      points:[
+        [0.72,0.76],
+        [0.895,0.742],
+        [1.2,0.68],
+        [1.4,0.7],
+        [1.6,0.64],
+        [2.0,0.62],
+        [2.8,0.6],
+        [3,0.58],
+        [4,0.55],
+        [4.5,0.55],
+        [5,0.54],
+        [6,0.52],
+        [7.0,0.53],
+        [8,0.5],
+        [9.5,0.51],
+        [10,0.5],
+        [12,0.48],
+        [14,0.49],
+        [15,0.47],
+        [18,0.48],
+        [20,0.47],
+        [25,0.45],
+        [28,0.46],
+        [30,0.44],
+        [35,0.42],
+        [40,0.44],
+        [45,0.3],
+        [60,0.38],
+        [70,0.41],
+        [90,0.4],
+        [110,0.42],
+        [120,0.41],
+        [150,0.42],
+        [165,0.44],
+        [200,0.45],
+        [230,0.46],
+        [250,0.47]
+      ]},
+
+    normal_manned: { name:"常规 · 有人机", grade:"B",
+      src:"公开规格：Cessna / Piper / Cirrus / Tecnam / Beech / ATR / CRJ / A320 / B737 / B777 / A380 / C-130 / C-17",
+      points:[
+        [1055,0.6],
+        [1080,0.6],
+        [1111,0.663],
+        [1157,0.663],
+        [1200,0.5],
+        [1230,0.67],
+        [1315,0.58],
+        [1385,0.6],
+        [1406,0.636],
+        [1450,0.62],
+        [1500,0.64],
+        [1524,0.58],
+        [1542,0.58],
+        [1633,0.45],
+        [1720,0.6],
+        [1785,0.7],
+        [1794,0.58],
+        [1999,0.7],
+        [2087,0.62],
+        [2130,0.58],
+        [2155,0.6],
+        [2177,0.62],
+        [2400,0.62],
+        [2500,0.6],
+        [2727,0.56],
+        [3000,0.6],
+        [3500,0.62],
+        [3629,0.591],
+        [3935,0.55],
+        [3969,0.59],
+        [4200,0.6],
+        [4581,0.6],
+        [4740,0.593],
+        [4750,0.55],
+        [4950,0.69],
+        [5500,0.58],
+        [6300,0.63],
+        [6804,0.663],
+        [8000,0.59],
+        [8100,0.62],
+        [10000,0.57],
+        [12000,0.6],
+        [17960,0.61],
+        [18000,0.58],
+        [23000,0.587],
+        [26000,0.58],
+        [29574,0.581],
+        [33000,0.57],
+        [38317,0.56],
+        [45000,0.56],
+        [45132,0.53],
+        [52290,0.553],
+        [60000,0.54],
+        [70307,0.488],
+        [70900,0.522],
+        [75500,0.54],
+        [78000,0.546],
+        [79016,0.524],
+        [82190,0.548],
+        [97000,0.517],
+        [115680,0.505],
+        [141000,0.539],
+        [186880,0.46],
+        [190000,0.484],
+        [242000,0.514],
+        [254000,0.507],
+        [265350,0.483],
+        [280000,0.509],
+        [351530,0.477],
+        [575000,0.481]
+      ]},
+    canard: { name:"鸭翼布局", grade:"C", src:"样本有限：Rutan 系列 + 鸭翼 UAV",
+      points:[[0.4,0.72],[1.1,0.65],[2.3,0.61],[6.5,0.58],[18,0.56],[100,0.535],[600,0.62],[3000,0.50]] },
+    flyingwing: { name:"飞翼布局", grade:"C", src:"样本有限：小型飞翼 UAV + BWB 概念",
+      points:[[0.3,0.72],[1.2,0.67],[5,0.62],[20,0.58],[100,0.54],[650,0.51],[3000,0.49],[20000,0.46]] },
+    joined: { name:"连翼布局", grade:"C", src:"样本有限：连翼 UAV + 箱式翼概念",
+      points:[[0.35,0.74],[1.5,0.65],[6.8,0.59],[32,0.55],[300,0.505],[2700,0.475],[20000,0.46]] }
+  },
+  ld: {
+    normal_small_uav: { grade:"B", src:"公开规格：小型 UAV 8–15",
+      points:[
+        [0.72,8],
+        [0.895,8],
+        [1.2,10],
+        [1.4,9],
+        [1.6,11],
+        [2.0,11],
+        [2.8,11],
+        [3,10],
+        [4,10],
+        [4.5,12],
+        [5,11],
+        [6,11],
+        [7.0,12],
+        [8,12],
+        [9.5,12],
+        [10,12],
+        [12,12],
+        [14,13],
+        [15,13],
+        [18,13],
+        [20,13],
+        [25,13],
+        [28,13],
+        [30,13],
+        [35,12],
+        [40,13],
+        [45,10],
+        [60,11],
+        [70,12],
+        [90,9],
+        [110,11],
+        [120,10],
+        [150,10],
+        [165,11],
+        [200,11],
+        [230,11],
+        [250,11]
+      ]},
+
+    normal_manned: { grade:"B", src:"公开规格：通航 11–15 / 支线 14–16 / 窄体 16–17 / 宽体 18–19",
+      points:[
+        [1055,12],
+        [1080,12],
+        [1111,12],
+        [1157,12],
+        [1200,11],
+        [1230,14],
+        [1315,13],
+        [1385,12],
+        [1406,12],
+        [1450,12],
+        [1500,13],
+        [1524,12],
+        [1542,12],
+        [1633,11],
+        [1720,12],
+        [1785,15],
+        [1794,13],
+        [1999,15],
+        [2087,11],
+        [2130,14],
+        [2155,12],
+        [2177,12],
+        [2400,14],
+        [2500,12],
+        [2727,14],
+        [3000,13],
+        [3500,14],
+        [3629,13],
+        [3935,14],
+        [3969,13],
+        [4200,13],
+        [4581,14],
+        [4740,14],
+        [4750,15],
+        [4950,15],
+        [5500,14],
+        [6300,16],
+        [6804,14],
+        [8000,14],
+        [8100,15],
+        [10000,14],
+        [12000,15],
+        [17960,16],
+        [18000,14],
+        [23000,15],
+        [26000,15],
+        [29574,15],
+        [33000,15],
+        [38317,16],
+        [45000,16],
+        [45132,17],
+        [52290,16],
+        [60000,16],
+        [70307,15],
+        [70900,17],
+        [75500,17],
+        [78000,17],
+        [79016,17],
+        [82190,17],
+        [97000,17],
+        [115680,17],
+        [141000,16],
+        [186880,18],
+        [190000,17],
+        [242000,18],
+        [254000,19],
+        [265350,16],
+        [280000,19],
+        [351530,19],
+        [575000,19]
+      ]},
+    canard: { grade:"C", src:"样本有限",
+      points:[[0.4,9],[1.6,11],[6.5,12.3],[25,13],[100,13.5],[600,13],[3000,14.5]] },
+    flyingwing: { grade:"C", src:"样本有限（飞翼升阻比优势）",
+      points:[[0.3,10],[1.2,13],[5,15],[20,16.5],[100,17.6],[650,18.7],[3000,19.4],[20000,20.5]] },
+    joined: { grade:"C", src:"样本有限",
+      points:[[0.35,10],[1.5,11.9],[6.8,13.3],[32,14],[300,14.7],[2700,15.35],[20000,16]] }
+  },
+  power: {
+    piston: { name:"活塞发动机", grade:"B", kind:"fuel",
+      bsfc:0.30, bsfcUnit:"kg/(kW·h)", pw:1.1, pwUnit:"kW/kg",
+      src:"典型型号：Rotax 912/914、Lycoming IO-360、Continental IO-550、Jabiru 2200",
+      bsfcPts:[[60,0.35],[84,0.33],[135,0.29],[160,0.28],[225,0.27]],
+      pwPts:[[60,0.85],[84,0.95],[135,1.15],[200,1.25],[225,1.30]] },
+    turboprop: { name:"涡桨发动机", grade:"B", kind:"fuel",
+      bsfc:0.28, bsfcUnit:"kg/(kW·h)", pw:4.5, pwUnit:"kW/kg",
+      src:"典型型号：PT6A-67、PW127、AE2100、TPE331",
+      bsfcPts:[[500,0.32],[1000,0.29],[1500,0.27],[2000,0.26],[3400,0.25]],
+      pwPts:[[500,3.6],[1000,4.4],[1500,4.9],[2000,5.2],[3400,5.8]] },
+    turbofan: { name:"涡扇 / 涡喷", grade:"B", kind:"fuel",
+      bsfc:0.27, bsfcUnit:"kg/(kW·h) 等效", pw:6.5, pwUnit:"kW/kg",
+      src:"典型型号：CFM56-7、LEAP-1A、PW1000G、GE90-115B",
+      bsfcPts:[[5000,0.31],[10000,0.29],[20000,0.28],[60000,0.26],[120000,0.24]],
+      pwPts:[[5000,5.0],[10000,5.8],[20000,6.4],[60000,7.6],[120000,8.8]] },
+    electric: { name:"电机 + 电池", grade:"B", kind:"elec",
+      e_batt:180, eUnit:"Wh/kg", pw_motor:8, pmUnit:"kW/kg", p_batt:1000, pbUnit:"W/kg",
+      src:"NASA NTRS 20180005327（电芯 ≤200 Wh/kg）、20200007148（250 Wh/kg @2C；电机 6.6–9.9 kW/kg）",
+      bsfcPts:[[10,0.06],[100,0.07],[500,0.08],[1000,0.08]],
+      pwPts:[[10,5.5],[100,7.5],[500,9.5],[1000,11.0]] }
+  }
+};
+
+/* ============================================================
+   拟合：log-log 二次 + 端点外推保护
+   ============================================================ */
+function pavaNonIncreasing(vals){
+  // 保序回归：在保持非增趋势下最小化平方误差
+  const blocks=[];
+  for(let i=0;i<vals.length;i++) blocks.push({v:vals[i], w:1});
+  let j=0;
+  while(j < blocks.length-1){
+    if(blocks[j].v < blocks[j+1].v){          // 出现上升 → 违反非增
+      const a=blocks[j], b=blocks[j+1];
+      blocks.splice(j, 2, {v:(a.v*a.w+b.v*b.w)/(a.w+b.w), w:a.w+b.w});
+      if(j>0) j--;
+    } else j++;
+  }
+  const out=[];
+  for(const b of blocks) for(let k=0;k<b.w;k++) out.push(b.v);
+  return out;
+}
+
+function fitCurve(pts){
+  const clean = pts.filter(p=>p[0]>0 && p[1]>0).slice().sort((a,b)=>a[0]-b[0]);
+  const n = clean.length;
+  if(n < 4) return {ok:false, n, msg:"样本不足（<4 点）"};
+  // log-log 空间的分段插值：曲线严格穿过每个样本点
+  const xs = clean.map(p=>Math.log10(p[0]));
+  // 原始数据非单调（不同机型设计差异大），插值会产生多个自洽解
+  // 用保序回归强制非增，消除多解
+  const ysRaw = clean.map(p=>Math.log10(p[1]));
+  const ys = ysRaw;   // 保留穿点精度（非单调，需配合多解处理）
+  return {
+    ok:true, n, r2:1.0, interp:true,
+    xmin:xs[0], xmax:xs[n-1],
+    predict(w){
+      const x = Math.log10(Math.max(w,1e-6));
+      let y;
+      if(x <= xs[0]){                       // 左端外推：用首段斜率
+        const k=(ys[1]-ys[0])/(xs[1]-xs[0]||1e-9);
+        y = ys[0] + k*(x-xs[0]);
+      } else if(x >= xs[n-1]){              // 右端外推：用末段斜率
+        const k=(ys[n-1]-ys[n-2])/(xs[n-1]-xs[n-2]||1e-9);
+        y = ys[n-1] + k*(x-xs[n-1]);
+      } else {
+        let lo=0, hi=n-1;                   // 二分找区间
+        while(hi-lo>1){ const mid=(lo+hi)>>1; if(xs[mid]<=x) lo=mid; else hi=mid; }
+        const t=(x-xs[lo])/((xs[hi]-xs[lo])||1e-9);
+        y = ys[lo] + t*(ys[hi]-ys[lo]);
+      }
+      return {v:Math.pow(10,y), extrap:(x<xs[0]-1e-9||x>xs[n-1]+1e-9)};
+    }
+  };
+}
+
+/* ============================================================
+   状态
+   ============================================================ */
+const S = {
+  step:1, power:null, layout:null, category:"manned", config:null,
+  input:{WPL:1.45,V:94,R:60,h:500,tHover:1.5,hTrans:50,Vc:5}, // V、Vc 分别 km/h、m/s
+  opt:{},      // 选填约束参数
+  ov:{},       // 用户覆盖
+  result:null, verify:[]
+};
+const SRC_LABEL = {input:"输入",calc:"计算",stat:"统计",assume:"假设",spec:"规范"};
+function dbKey(){
+  if(S.layout !== "normal") return S.layout;
+  return (S.category === "uav") ? "normal_small_uav" : "normal_manned";
+}
+function P(v,sym,name,unit,src,zh,symF,deps,note){
+  return {v,sym,name,unit,src,zh:zh||"",symF:symF||"",deps:deps||[],note:note||""};
+}
+
+/* ============================================================
+   计算引擎
+   ============================================================ */
+/* 电池包换算：电压 V × 容量 Ah → Wh、Wh/kg；连续电流 A 或倍率 C → 比功率 */
+function batteryFromPack(pv, ah, m, a, c){
+  const v=Number(pv), cap=Number(ah), mass=Number(m);
+  const curA=(a===""||a===null||a===undefined)?null:Number(a);
+  const curC=(c===""||c===null||c===undefined)?null:Number(c);
+  const out={ok:false,msg:""};
+  if(!(v>0)||!(cap>0)||!(mass>0)){
+    out.msg="标称电压、额定容量、电池包质量都要大于零"; return out;
+  }
+  if(curA!==null && curC!==null && curA>0 && curC>0){
+    out.msg="连续放电电流与连续放电倍率只填一项，避免两套数打架"; return out;
+  }
+  if(curA!==null && !(curA>0)){ out.msg="放电电流要大于零"; return out; }
+  if(curC!==null && !(curC>0)){ out.msg="放电倍率要大于零"; return out; }
+  const wh=v*cap, e=wh/mass;
+  if(e>500){
+    out.e=e; out.wh=wh;
+    out.msg=`比能量 ${e.toFixed(0)} Wh/kg 超过 500，先检查容量单位：${cap} Ah 是不是该填 mAh？参数未应用`;
+    return out;
+  }
+  const cur=(curA!==null)?curA:(curC!==null?curC*cap:null);
+  out.ok=true; out.wh=wh; out.e=e; out.current=cur;
+  if(cur!==null){ out.p=v*cur/mass;
+    out.msg=`标称能量 ${wh.toFixed(0)} Wh；比能量 ${e.toFixed(1)} Wh/kg；连续比功率 ${(v*cur/mass).toFixed(0)} W/kg`; }
+  else { out.msg=`标称能量 ${wh.toFixed(0)} Wh；比能量 ${e.toFixed(1)} Wh/kg；没填放电能力，比功率仍按参数或库值`; }
+  return out;
+}
+
+function computeAll(){
+  const I=S.input, rho=rhoHW(I.h), P0=DB.power[S.power];
+  const V=(I.V||0)/3.6;                             // 巡航速度 km/h → m/s（只此一处换算）
+  const Vc=(I.Vc||0);                               // 爬升率输入就是 m/s，不再换算
+  const isElec = S.power==="electric";
+  const isVTOL = S.config!=="fixedwing";
+  const isMulti = S.config==="multirotor";
+  const isTilt = S.config==="tiltrotor";
+  const fEf=fitCurve(DB.emptyFrac[dbKey()].points);
+  const LDf=fitCurve(DB.ld[dbKey()].points);
+  const o=S.ov;
+  // 电池口径：按参数（比能量/比功率）或按自己的电池包换算，二选一
+  const battMode = o.battMode ?? "spec";
+  const battInfo = batteryFromPack(o.packV, o.packAh, o.packMass, o.packA, o.packC);
+  const battUsable = battMode==="pack" && battInfo.ok;
+  const eBatt = battUsable ? battInfo.e : (o.e_batt ?? P0.e_batt);
+  const pBatt = (battUsable && isFinite(battInfo.p)) ? battInfo.p : (o.p_batt ?? 1000);
+  const DoD = o.DoD ?? 0.85;
+  const etaP=o.etaP??0.78, etaT=o.etaT??0.96, FM=o.FM??0.70;
+  const AR=o.AR??6.0, reserve=o.reserve??0.20, CLmax=o.CLmax??1.4;
+  const NB=o.NB??6, Dr=o.D??0.38, Arot=NB*Math.PI/4*Dr*Dr;
+  const kTrans=o.kTrans??1.15, pAux=o.P_aux??40;
+  const res={p:{},warn:[],iters:[]};
+  const hTrans = isTilt ? (I.hTrans || o.hTrans || 50) : 0;
+
+  // 剖面时间：三种构型共用一套，能量/燃油/界面都读这一份
+  const tHov   = isVTOL ? (I.tHover||0)*60 : 0;
+  const tTrans = isTilt ? 20 : 0;
+  const tClimb = Vc>0 ? Math.max(0, I.h - hTrans)/Vc : 0;
+  const tCr    = V>0 ? I.R*1000/V : 0;
+  const tMission = tHov + tTrans + tClimb + tCr;
+
+  let Wto=I.WPL/0.45, fE=0.5, LD=13, mB=0, Wf=0, fF=0;
+  let Phov=0,Pcl=0,Pcr=0,Ppk=0,Ptrans=0,Ptr=0;
+
+  // 计算给定总重下的各项
+  function state(Wt){
+    const fe = o.fE ?? Math.min(0.85, Math.max(0.12, fEf.predict(Wt).v));
+    // 巡航点不在 L/Dmax 上：设计巡航升阻比取库值 ×0.85（30 t 以下有效，大机已有 bigCorr）
+    const ldCruise = o.ldCruise ?? 0.85;
+    const ld = o.LD ?? (Math.max(4, LDf.predict(Wt).v) * (Wt < 30000 ? ldCruise : 1));
+    const W = Wt*G;
+    // 悬停功率：理想诱导功率 ÷ FM（FM 已含诱导+型阻），再除传动效率。
+    // 悬停不产生前飞推力，乘推进效率属于重复计入损失。
+    const ph = isVTOL ? Math.pow(W,1.5)/Math.sqrt(2*rho*Arot)/FM/etaT : 0;
+    const pcr= W*V/(ld*etaP*etaT);
+    const pcl_inc = W*Vc/(etaP*etaT);
+    const pcl_fwd = pcr + pcl_inc;                    // 机翼模式爬升（固定翼 / 倾转旋翼）
+    // 多旋翼竖直爬升用轴向动量理论：T(Vc/2 + √(Vc²/4 + vi²))，vi² = W/(2ρA)
+    const pcl_vt  = (isMulti && Vc>0 && ph>0)
+      ? W*(Vc/2 + Math.sqrt(Vc*Vc/4 + W/(2*rho*Arot)))/(FM*etaT)
+      : ph + pcl_inc;
+    const pc = isMulti ? pcl_vt : pcl_fwd;
+    const ptr = isVTOL ? ph*kTrans : 0;
+    const cases = isMulti ? [ph,pcl_vt,pcr] : (isTilt ? [ph,ptr,pcl_fwd,pcr] : [pcl_fwd,pcr]);
+    const ppk= Math.max(...cases.filter(v=>v>0), 0);
+
+    // 剖面：功率×时长=能量，与下面燃油/电池同源
+    const segs=[];
+    if(isVTOL && ph>0 && tHov>0) segs.push(["悬停",ph,tHov,"起降悬停与进近"]);
+    if(isVTOL && ptr>0 && tTrans>0) segs.push(["过渡",ptr,tTrans,`≈${kTrans}×悬停功率`]);
+    if(pc>0 && tClimb>0) segs.push(["爬升",pc,tClimb,isMulti?"竖直爬升":"机翼模式爬升"]);
+    if(pcr>0 && tCr>0) segs.push(["巡航",pcr,tCr,"重量×速度÷(L/D×效率)"]);
+    if(pAux>0 && tMission>0) segs.push(["机载设备",pAux,tMission,"航电/任务载荷常开"]);
+    const E_task = segs.reduce((a,s)=>a+s[1]*s[2]/3600, 0);
+
+    let fuel=0, batt=0, ff=0, Et=0, m1=0, m2=0, fsegs=null;
+    if(isElec){
+      Et = E_task*(1+reserve);
+      m1 = Et/(DoD*eBatt);
+      m2 = ppk/pBatt;
+      batt = Math.max(m1,m2);
+    }else{
+      const bsfc=(o.bsfc??P0.bsfc)/3.6e6;              // kg/J
+      const lnR=(I.R*1000)*G*bsfc/(etaP*ld);
+      const ffCruise=1-Math.exp(-lnR);                  // 仅巡航（Breguet）
+      // 爬升油耗只计势能项，与已验证的 9 架口径一致
+      const fuelClimb = (Wt*G*Vc/(etaP*etaT))*tClimb*bsfc;
+      const fuelVTOL  = (ph*tHov + ptr*tTrans)*bsfc;
+      const fuelAux   = pAux*tMission*bsfc;
+      const fuelDescent = (o.fDescent??0.03)*ffCruise*Wt;
+      const fuelTaxi    = (o.fTaxi??0.06)*ffCruise*Wt;
+      const reserveHold = W*V/ld * 2700 * bsfc;         // 45 min 盘旋
+      const reservePct  = 0.05 * ffCruise * Wt;         // 5% 航程备份
+      const reserveFair = Math.max(reserveHold, reservePct);
+      const fuelTask0 = ffCruise*Wt + fuelClimb + fuelVTOL + fuelAux
+                      + fuelDescent + fuelTaxi + reserveFair;
+      const LARGE_T = 30000;
+      const bigCorr = Wt > LARGE_T ? Math.pow(LARGE_T/Wt, 0.20) : 1;
+      fuel = fuelTask0 * bigCorr;
+      ff = fuel/Wt;
+      // 燃油剖面：逐项相加等于 fuel
+      fsegs=[];
+      if(isTilt && ph>0 && ptr>0){
+        if(ph*tHov>0) fsegs.push(["悬停", ph*tHov*bsfc]);
+        if(ptr*tTrans>0) fsegs.push(["过渡", ptr*tTrans*bsfc]);
+      } else if(fuelVTOL>0) fsegs.push(["悬停/过渡", fuelVTOL]);
+      if(fuelClimb>0) fsegs.push(["爬升", fuelClimb]);
+      fsegs.push(["巡航", ffCruise*Wt]);
+      if(fuelAux>0) fsegs.push(["机载设备", fuelAux]);
+      if(fuelDescent>0) fsegs.push(["下降", fuelDescent]);
+      if(fuelTaxi>0) fsegs.push(["滑行", fuelTaxi]);
+      if(reserveFair>0) fsegs.push(["备份", reserveFair]);
+      if(bigCorr!==1) fsegs.push([`大机修正 ×${bigCorr.toFixed(2)}`, (bigCorr-1)*fuelTask0]);
+    }
+    return {fe, ld, ph, pc, pcr, ptr, ppk, fuel, batt, ff, segs, fsegs,
+            E_task, Et, m1, m2};
+  }
+  // 残差：W - (WPL + 空重 + 燃油/电池)
+  function resid(Wt){
+    const s = state(Wt);
+    return Wt - (I.WPL + s.fe*Wt + (isElec ? s.batt : s.fuel));
+  }
+
+  // 多根扫描：插值曲线非单调时 resid 可能有多个零点，取载荷分数合理的那个
+  const roots = [], brackets = [];
+  let prevW = I.WPL*1.02, prevR = resid(prevW);
+  for(let W = I.WPL*1.06; W <= I.WPL*60; W *= 1.06){
+    const rr = resid(W);
+    if(isFinite(rr) && isFinite(prevR) && rr*prevR < 0){
+      let a=prevW, b=W;
+      for(let k=0;k<70;k++){
+        const m=(a+b)/2;
+        if(resid(m)*resid(a) <= 0) b=m; else a=m;
+      }
+      roots.push((a+b)/2); brackets.push([prevW,W]);
+    }
+    prevW = W; prevR = rr;
+  }
+  let solved = false;
+  if(roots.length === 0){
+    res.warn.push("重量闭合无解：在载重的 1–60 倍范围内找不到自洽总重");
+    // 兜底点只用于不崩，所有下游结果都标为无效
+    let best=I.WPL/0.45, bestv=1e18;
+    for(let W=I.WPL*1.1; W<=I.WPL*40; W*=1.03){
+      const v=Math.abs(resid(W)); if(v<bestv){bestv=v;best=W;}
+    }
+    Wto=best;
+  } else {
+    const valid = roots.filter(w => { const f=I.WPL/w; return f>0.10 && f<0.50; });
+    const pool = valid.length ? valid : roots;
+    const TARGET = (S.layout==="normal" && S.category==="uav") ? 0.38 : 0.22;
+    Wto = pool.reduce((best,w)=>
+      Math.abs(I.WPL/w - TARGET) < Math.abs(I.WPL/best - TARGET) ? w : best, pool[0]);
+    solved = true;
+    if(roots.length > 1){
+      const rl = roots.slice(0,5).map(w=>fmt(w,2)).join("、");
+      res.warn.push(`发现 ${roots.length} 个闭合解（${rl} kg），这里显示最接近典型载荷分数的那个；`
+        + "多解本身说明假设或统计曲线不自洽，别把它当成唯一解");
+    }
+    // 迭代记录：把二分法真实的区间收缩过程记下来（不是围绕结果编的数字）
+    let [a,b] = brackets[roots.indexOf(Wto)] || brackets[0];
+    for(let k=0;k<12;k++){
+      const m = (a+b)/2, st = state(m);
+      res.iters.push({k:k+1, Wto:m, fE:st.fe, LD:st.ld, fuel:st.fuel, mB:st.batt,
+                      resid:resid(m), conv:Math.abs(b-a)/2});
+      if(resid(m)*resid(a) <= 0) b=m; else a=m;
+    }
+  }
+  const fin = state(Wto);
+  fE=fin.fe; LD=fin.ld; Wf=fin.fuel; mB=fin.batt; fF=fin.ff;
+  Phov=fin.ph; Pcl=fin.pc; Pcr=fin.pcr; Ppk=fin.ppk; Ptr=fin.ptr;
+
+  const WE=fE*Wto;
+  // 翼载没给时按「失速速度 ≈ 0.35V」反推一个量级合理的起点
+  const wsDef = V>0 ? Math.min(900, Math.max(15, 0.5*RHO0*Math.pow(0.35*V,2)*CLmax/G)) : 17;
+  const WS = o.WS ?? wsDef;
+  const Sw = Wto/WS;
+  const bs = Math.sqrt(AR*Sw);
+  const Vapp = S.opt.Vapp ? S.opt.Vapp/3.6 : V*0.6;   // 输入 km/h → m/s
+  const Vstall = Math.sqrt(2*WS*G/(RHO0*CLmax));
+  const CLc = 2*(Wto*0.98)*G/(rho*V*V*Sw);            // V 是 m/s
+  const CLi = CLc/0.95/0.90;
+
+  const srcF = x => x==="输入"?"input":x==="统计"?"stat":x==="计算"?"calc":"spec";
+  res.p = {
+    WPL:P(I.WPL,"W_PL","任务载重","kg","input"),
+    V:P(V,"V","巡航速度","m/s","input"),
+    R:P(I.R,"R","航程","km","input"),
+    h:P(I.h,"h","巡航高度","m","input"),
+    rho:P(rho,"ρ","空气密度","kg/m³","calc",
+      "空气密度 = 海平面密度 × (1 − 2.2557e-5 × 高度)^4.2559",
+      "ρ = ρ0·(1 − 2.2557e-5·h)^4.2559",["h"]),
+    fE:P(fE,"f_E","空重分数","—","stat",
+      "空重分数 = 空重 ÷ 起飞总重。空重含结构、动力、系统、设备，不含燃油/电池与载荷。按幂律拟合得到",
+      "f_E = a·W_TO^b（log-log 二次拟合）",["W_TO"],
+      DB.emptyFrac[dbKey()].src+`（N=${fEf.n}，插值）`),
+    LD:P(LD,"L/D","升阻比","—","stat",
+      "升阻比 = 升力 ÷ 阻力，巡航状态。库值是 L/Dmax，实际巡航点取 0.85 倍（30 t 以下）",
+      "L/D = a·W_TO^b × 0.85（log-log 二次拟合）",["W_TO"],
+      DB.ld[dbKey()].src+`（N=${LDf.n}，插值）`),
+    etaP:P(etaP,"η_prop","推进效率","—","spec","螺旋桨把轴功率转成推进功率的效率"),
+    etaT:P(etaT,"η_trans","传动效率","—","spec","传动与电调损失"),
+    FM:P(FM,"FM","旋翼品质因数","—","stat","理想悬停功率与实际功率之比"),
+    bs:P(bs,"BSFC","比油耗","kg/(kW·h)","stat",
+      "比油耗 = 每产生 1 kW·h 轴功消耗的燃油质量","BSFC = ṁ_fuel/P",[],
+      DB.power[S.power]?.src||""),
+    Arot:P(Arot,"A_rotor","总桨盘面积","m²","calc","桨盘面积 = 旋翼数 × π/4 × 桨径²","A = N·π/4·D²",[]),
+    NB:P(NB,"N","旋翼数量","个","input"),
+    Drot:P(Dr,"D","桨径","m","input"),
+    Vc:P(Vc,"V_c",isMulti?"垂直爬升率":"机翼模式爬升率","m/s","input"),
+    Phov:P(Phov,"P_hover","悬停功率","W","calc",
+      "悬停功率 = 重量^1.5 ÷ √(2×空气密度×桨盘面积) ÷ 品质因数 ÷ 传动效率。FM 已含诱导与型阻，悬停不产生前飞推力，不再乘推进效率",
+      "P_hover = W^1.5/√(2ρA)/FM/η_trans",["W_TO","rho","Arot","FM"]),
+    Ptrans:P(Ptr,"P_trans","过渡功率","W","calc",
+      `倾转过渡段功率 = 过渡系数 × 悬停功率（系数 ${kTrans}，可在效率页覆盖）`,
+      "P_trans = k_trans·P_hover",["Phov"]),
+    Paux:P(pAux,"P_aux","机载设备功率","W","assume",
+      "航电、飞控、任务载荷等常开功率，按全任务时长计入能量/燃油","P_aux = const"),
+    Pcl:P(Pcl,"P_climb",isMulti?"垂直爬升功率":"机翼模式爬升功率","W","calc",
+      isMulti?"垂直爬升功率 = 悬停功率 + 重量×爬升率÷效率":"机翼模式爬升功率 = 巡航功率 + 重量×爬升率÷效率（倾转旋翼在机翼模式爬升，不做持续竖直爬升）",
+      isMulti?"P_climb = P_hover + W·V_c/η":"P_climb = P_cruise + W·V_c/η",["Phov","Pcr","Vc"]),
+    Pcr:P(Pcr,"P_cruise","巡航功率","W","calc",
+      "巡航功率 = 重量×速度 ÷ (升阻比×推进效率×传动效率)","P_cruise = W·V/((L/D)·η_prop·η_trans)",["W_TO","V","LD"]),
+    Ppk:P(Ppk,"P_peak","峰值功率","W","calc",
+      "峰值功率 = 各剖面功率的最大值","P_peak = max(P_hover,P_trans,P_climb,P_cruise)",["Phov","Ptrans","Pcl","Pcr"]),
+    Etask:P(fin.E_task,"E_task","任务能量","Wh","calc",
+      "任务能量 = Σ(段功率 × 段时长)，与重量闭合里的电池/燃油计算同一份剖面",
+      "E_task = Σ P_i·t_i",["Phov","Ptrans","Pcl","Pcr","Paux"]),
+    fF:P(fF,"f_fuel","总燃油分数","—","calc",
+      "燃油分数 = (巡航 + 爬升 + 下降 + 滑行) × (1+裕度) ÷ 起飞总重",
+      "f_fuel = [Σ各段燃油](1+reserve)/W_TO",["W_TO"],
+      "巡航用 Breguet，爬升按功率×时间，下降 2%、滑行 6%（可覆盖）"),
+    W_TO:P(Wto,"W_TO","起飞总重","kg","calc",
+      isElec?"总重 = 载重 + 空重 + 电池，需迭代求解":"总重 = 载重 ÷ (1 − 燃油分数 − 空重分数)",
+      isElec?"W_TO = W_PL + f_E·W_TO + m_batt":"W_TO = W_PL/(1 − f_fuel − f_E)",
+      isElec?["WPL","fE","mB"]:["WPL","fF","fE"]),
+    W_E:P(WE,"W_E","空重","kg","calc","空重 = 空重分数 × 起飞总重","W_E = f_E·W_TO",["fE","W_TO"]),
+    W_fuel:P(Wf,"W_fuel","燃油重量","kg","calc","燃油重量 = 燃油分数 × 起飞总重","W_fuel = f_fuel·W_TO",["fF","W_TO"]),
+    m_batt:P(mB,"m_batt","电池质量","kg","calc",
+      "电池质量 = max( 能量需求÷(放电深度×比能量) , 峰值功率÷电池比功率 )",
+      "m_batt = max(E/(DoD·e), P_peak/(P/m))",["W_TO","Ppk"]),
+    W_S:P(WS,"W/S","翼载","kg/m²","input","翼载 = 重量 ÷ 机翼面积","W/S",[]),
+    S_wing:P(Sw,"S","机翼面积","m²","calc","机翼面积 = 起飞总重 ÷ 翼载","S = W_TO/(W/S)",["W_TO","W_S"]),
+    b:P(bs,"b","翼展（几何参考）","m","calc","翼展 = √(展弦比 × 机翼面积)。注意：约束边界分析只用 W/S 与 W/P，翼展属于几何阶段输出，不参与约束求解","b = √(AR·S)",["AR","S_wing"]),
+    AR:P(AR,"AR","展弦比（几何参考）","—","stat","展弦比 = 翼展² ÷ 机翼面积。同上：约束分析不需要它，只有算机翼平面形状时才用","AR = b²/S",[]),
+    Vstall:P(Vstall,"V_s","失速速度","m/s","calc",
+      "失速速度 = √(2 × 翼载 × 重力 ÷ (海平面密度 × 最大升力系数))",
+      "V_s = √(2·(W/S)·g/(ρ0·C_Lmax))",["W_S","CLmax"]),
+    CLmax:P(CLmax,"C_Lmax","最大升力系数","—","spec"),
+    C_Lc:P(CLc,"C_Lc","巡航升力系数","—","calc",
+      "巡航升力系数 = 2 × 巡航重量 ÷ (空气密度 × 速度² × 机翼面积)",
+      "C_Lc = 2·W_c/(ρ·V²·S)",["W_TO","rho","V","S_wing"]),
+    C_Li:P(CLi,"C_li","翼型设计升力系数","—","calc",
+      "翼型设计升力系数 = 巡航升力系数 ÷ 0.95 ÷ 0.90",
+      "C_li = C_Lc/0.95/0.90",["C_Lc"]),
+    DoD:P(DoD,"DoD","放电深度","—","spec"),
+    reserve:P(reserve,"reserve","能量裕度","—","spec"),
+    ...(isElec?{
+      Epack:P(battUsable?battInfo.wh:NaN,"E_pack","电池包标称能量","Wh",
+        battUsable?"calc":"assume",
+        "电池包标称能量 = 标称电压 × 额定容量","E_pack = V·Ah",[]),
+      e_batt:P(eBatt,"e_batt","电池比能量","Wh/kg",battUsable?"calc":"stat",
+        battUsable?"按你填的电池包换算：标称能量 ÷ 整包质量":"按参数值（或动力库典型值）取用",
+        battUsable?"e = V·Ah/m":"e = const"),
+      p_batt:P(pBatt,"p_batt","电池比功率","W/kg",
+        battUsable?(isFinite(battInfo.p)?"calc":"assume"):"stat",
+        battUsable?"按你填的电池包换算：标称电压 × 连续放电电流 ÷ 整包质量，用来核对功率约束"
+                 :"按参数值取用，用来核对功率约束",
+        battUsable?"P/m = V·I/m":"P/m = const")
+    }:{})
+
+  };
+  res.Wto=Wto; res.fE=fE; res.LD=LD; res.rho=rho; res.WS=WS; res.S=Sw;
+  res.Phov=Phov; res.Pcl=Pcl; res.Pcr=Pcr; res.Ppk=Ppk; res.Ptr=Ptr;
+  res.Vstall=Vstall; res.Vapp=Vapp; res.isElec=isElec; res.isVTOL=isVTOL;
+  res.CLc=CLc; res.CLi=CLi; res.b=bs; res.WE=WE;
+  res.valid = solved;
+  res.profile = fin.segs;
+  res.fuelSegs = fin.fsegs;
+  res.E_task = fin.E_task;
+  res.Et = fin.Et;
+  res.mBattE = fin.m1;
+  res.mBattP = fin.m2;
+  res.P_aux = pAux;
+  res.kTrans = kTrans;
+  res.battMode = battMode;
+  res.battInfo = battInfo;
+  res.eBatt = eBatt;
+  res.pBatt = pBatt;
+  res.DoD = DoD;
+  res.rootsAll = roots.slice();
+  if(isElec && battMode==="pack" && !battInfo.ok){
+    res.warn.push(`电池包数据没算出来（${battInfo.msg}），比能量/比功率回落到参数值`);
+  }
+  res.tSeg = {hover:tHov, trans:tTrans, climb:tClimb, cruise:tCr, mission:tMission};
+  res.fits={fE:fEf,LD:LDf};
+  res.constraints = buildConstraints(res);
+  return res;
+}
+
+/* ============================================================
+   约束边界（9 条）
+   ============================================================ */
+function buildConstraints(res){
+  const I=S.input, o=S.opt, Wto=res.Wto, rho=res.rho;
+  const V=(I.V||0)/3.6, Vc=(I.Vc||0);          // V: km/h→m/s；Vc 本就是 m/s
+  const CLmax=S.ov.CLmax??1.4, etaP=S.ov.etaP??0.78, etaT=S.ov.etaT??0.96;
+  const ARc=S.ov.AR??6, eO=S.ov.eOswald??0.85;
+  const W=Wto*G;
+  const list=[];
+
+  // 阻力极线的零升阻力：按重量闭合用的 L/D 反标定，让两条线出自同一个气动假设。
+  // 没给 Cd0 时由设计巡航点反解；给了就尊重用户输入。
+  const CLd = 2*res.WS*G/(rho*V*V);
+  const cdInd = CLd*CLd/(Math.PI*eO*ARc);
+  const Cd0 = S.ov.Cd0 ?? Math.max(0.006, Math.min(0.08, CLd/Math.max(2.0,res.LD) - cdInd));
+  res.Cd0 = Cd0; res.CLd = CLd;
+
+  // 巡航功率随翼载变化：型阻项 ∝ 1/(W/S)，诱导项 ∝ (W/S) → 曲线而非直线
+  const pCruise=(ws)=>{
+    const S=Wto/ws;
+    const CL=2*ws*G/(rho*V*V);
+    const Cd=Cd0+CL*CL/(Math.PI*eO*ARc);
+    return 0.5*rho*V*V*V*S*Cd/(etaP*etaT);   // W
+  };
+  const toWP=wPerKW=>Wto*1000/wPerKW;        // W→W/P(kg/kW)
+
+  // 曲线约束：给定 ws，返回所需 W/P 上限
+  const CURVE=(id,name,f,color,zh)=>{
+    const samples=[];
+    for(let ws=5; ws<=1200; ws*=1.18){
+      const pw=f(ws);
+      if(!isFinite(pw)||pw<=0) continue;
+      const wpv=toWP(pw);
+      if(!isFinite(wpv)||wpv<=0) continue;
+      samples.push([ws, wpv]);
+    }
+    if(samples.length>4) list.push({id,name,type:"c",samples,color,zh});
+  };
+  const H=(id,name,pw,color,zh)=>{ if(pw>0&&isFinite(pw)) list.push({id,name,type:"h",val:toWP(pw),color,zh}); };
+  const Vline=(id,name,ws,color,zh)=>{ if(ws>0&&isFinite(ws)) list.push({id,name,type:"v",val:ws,color,zh}); };
+
+  // C3 巡航平飞（曲线）
+  CURVE("cruise","巡航平飞",ws=>pCruise(ws),"#2f6d8f","巡航平飞功率随翼载变化：型阻 ∝ 1/(W/S)，诱导 ∝ (W/S)");
+  // C4 全发爬升（曲线）：梯度 γ
+  if(o.gamma>0)
+    CURVE("fwdclimb",`全发爬升 ${o.gamma}%`,ws=>pCruise(ws)+W*V*(o.gamma/100)/(etaP*etaT),"#c05621","巡航功率 + 爬升梯度所需功率");
+  // C5 单发失效第二段（曲线）：只剩一半功率
+  if(o.gammaOEI>0)
+    CURVE("oei",`单发第二段 ${o.gammaOEI}%`,ws=>(pCruise(ws)+W*V*(o.gammaOEI/100)/(etaP*etaT))*1.9,"#9c3024","单发后剩余功率需维持的梯度");
+  // C6 航路单发（曲线）
+  if(o.gammaRoute>0)
+    CURVE("route",`航路单发 ${o.gammaRoute}%`,ws=>(pCruise(ws)+W*V*(o.gammaRoute/100)/(etaP*etaT))*2.0,"#6b5b95","航路单发失效的最小梯度");
+
+  // 悬停/过渡（VTOL 才有）：水平线
+  if(res.isVTOL){
+    H("hover","悬停",res.Phov,"#5b7c99","悬停功率");
+    H("trans","过渡",res.Ptr,"#b08b6b",`倾转过渡段（${(res.kTrans??1.15)}×悬停功率）`);
+    if(o.Vwind>0){
+      const Vwind=o.Vwind*0.5144;
+      H("wind",`抗风 ${o.Vwind}kt`,res.Phov+W*Vwind/(etaP*etaT)*0.5,"#4a7c8a","抗风悬停余量");
+    }
+  }
+  // C2 着陆距离（竖线）
+  if(o.SL>0){
+    const ws=o.SL*rho*G*CLmax*0.30/1.9;
+    Vline("sl",`着陆 ${o.SL}m`,ws,"#8a7a5a","着陆距离反推的翼载上限");
+  }
+  // 起飞距离（竖线）
+  if(o.STO>0){
+    const TWR=o.TWR ?? (res.isVTOL?0.50:0.30);
+    const ws=o.STO*rho*G*CLmax*TWR/1.44;
+    Vline("sto",`起飞 ${o.STO}m`,ws,"#7a6a99","起飞滑跑距离反推的翼载上限");
+  }
+  // 失速/进场速度（竖线）
+  Vline("stall",`失速 V=${fmt(res.Vapp,0)}`,0.5*RHO0*res.Vapp*res.Vapp*CLmax/G,"#9c3024",
+    "由进场速度与最大升力系数反推的翼载上界");
+  // 盘旋过载（竖线）
+  if(o.nTurn>0){
+    const ws=0.5*rho*V*V*CLmax/(o.nTurn*G);
+    Vline("turn",`盘旋 n=${o.nTurn}`,ws,"#6b8e5a","盘旋过载下的翼载上限");
+  }
+  return list;
+}
+
+function feasible(res, ws, wp){
+  const cs=res.constraints||[];
+  const maxWS=Math.min(...cs.filter(c=>c.type==="v").map(c=>c.val).concat([1e9]));
+  let maxWP=Math.min(...cs.filter(c=>c.type==="h").map(c=>c.val).concat([1e9]));
+  // 曲线约束：在该 W/S 处插值得到 W/P 上限
+  for(const c of cs.filter(x=>x.type==="c")){
+    const v=interpCurve(c.samples, ws);
+    if(isFinite(v)&&v>0) maxWP=Math.min(maxWP, v);
+  }
+  return { maxWS, maxWP, ok: ws<=maxWS*1.001 && wp<=maxWP*1.001 };
+}
+function interpCurve(pts, x){
+  if(!pts||pts.length<2) return NaN;
+  if(x<=pts[0][0]) return pts[0][1];
+  for(let i=1;i<pts.length;i++){
+    if(x<=pts[i][0]){
+      const [x0,y0]=pts[i-1], [x1,y1]=pts[i];
+      return y0+(y1-y0)*(x-x0)/((x1-x0)||1e-9);
+    }
+  }
+  return pts[pts.length-1][1];
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const fld=(id,label,unit,val,step,hint)=>`
+  <div class="field"><label>${label}</label>
+    <input id="${id}" type="number" step="${step}" value="" data-def="${val??""}"
+      placeholder="${hint||""}" title="${hint||""}">
+    <div class="unit">${unit}</div></div>`;
+
+/* 带初值的输入：用于必须看得见数值的场合（如电池包），清空则回落到这里给的数 */
+const fldv=(id,label,unit,val,step,hint)=>`
+  <div class="field"><label>${label}</label>
+    <input id="${id}" type="number" step="${step}" value="${val??""}" data-def="${val??""}"
+      placeholder="${hint||""}" title="${hint||""}">
+    <div class="unit">${unit}</div></div>`;
+
+function render(){
+  const m=document.getElementById("main");
+  const fn=[null,step1,step2,step3,step4,step5,step6,step7,step8,step9][S.step];
+  m.innerHTML=fn();
+  if(S.step>=3) afterRender();
+  renderSteps();
+}
+
+/* 统计库点数（常规布局按当前机型类别取分库） */
+function dbCount(layout){
+  const k=(layout==="normal")?((S.category==="uav")?"normal_small_uav":"normal_manned"):layout;
+  const e=DB.emptyFrac[k];
+  return e?e.points.length:0;
+}
+
+function step1(){
+  const opts=(key,list)=>list.map(o=>`
+    <div class="opt ${S[key]===o.v?'sel':''}" onclick="pick('${key}','${o.v}')">
+      <b>${o.t}</b><span>${o.d}</span></div>`).join("");
+  return `
+  <h2>第一步 · 选择构型</h2>
+  <div class="hint">三项选择决定统计库与计算链；界面只问布局，不问具体用途</div>
+  <div class="card"><h3>① 动力类型 <span class="tag">决定重量闭合方式</span></h3>
+    <div class="grid g4">${opts("power",[
+      {v:"piston",t:"活塞",d:"BSFC 0.25–0.35，闭式解"},
+      {v:"turboprop",t:"涡桨",d:"BSFC 0.24–0.32"},
+      {v:"turbofan",t:"涡扇 / 涡喷",d:"等效 BSFC 0.22–0.34"},
+      {v:"electric",t:"电机 + 电池",d:"质量不变 → 迭代解"}])}</div></div>
+  <div class="card"><h3>② 总体布局</h3>
+    <div class="grid g4">${opts("layout",[
+      {v:"normal",t:"常规布局",d:dbCount("normal")+" 机型样本"},
+      {v:"canard",t:"鸭翼布局",d:dbCount("canard")+" 机型样本"},
+      {v:"flyingwing",t:"飞翼布局",d:dbCount("flyingwing")+" 机型样本"},
+      {v:"joined",t:"连翼布局",d:dbCount("joined")+" 机型样本"}])}</div></div>
+  <div class="card"><h3>③ 旋翼构型</h3>
+    <div class="grid g3">${opts("config",[
+      {v:"fixedwing",t:"固定翼",d:"无悬停能力"},
+      {v:"multirotor",t:"多旋翼",d:"纯旋翼升力"},
+      {v:"tiltrotor",t:"倾转旋翼",d:"悬停 + 巡航"}])}</div></div>
+  ${catCard()}`;
+}
+function catCard(){
+  if(S.layout !== "normal") return "";
+  const opt=(v,t,d)=>`<div class="opt ${S.category===v?'sel':''}" onclick="pick('category','${v}')">
+      <b>${t}</b><span>${d}</span></div>`;
+  return `<div class="card"><h3>④ 机型类别 <span class="tag">决定用哪套空重库</span></h3>
+    <div class="grid g2">
+      ${opt("manned","有人机 / 民航","通航、支线、客机、运输机")}
+      ${opt("uav","小型无人机","< 250 kg 的小型 UAV（大型无人机样本不足，已不单列）")}
+    </div>
+    <div class="note" style="margin-top:10px">
+      无人机与有人机在 800–2000 kg 段的空重分数相差约 0.2（无人机结构轻、载荷分数高），
+      必须分库统计，否则插值会跨过这条断层。
+    </div></div>`;
+}
+
+function pick(k,v){ S[k]=v; render(); }
+
+function step2(){
+  const vt=S.config!=="fixedwing";
+  return `
+  <h2>第二步 · 基本参数</h2>
+  <div class="hint">必填项决定主流程；选填项只用于后面画约束边界，不填就不画那一条</div>
+  <div class="card"><h3>必填 · 任务与飞行条件</h3>
+    <div class="grid g4">
+      ${fld("inWL","任务载重 W_PL","kg",S.input.WPL,0.05)}
+      ${fld("inV","巡航速度 V","km/h",S.input.V,0.5)}
+      ${fld("inR","航程 R","km",S.input.R,1)}
+      ${fld("inH","巡航高度 h","m",S.input.h,50)}
+      ${vt?fld("inTH",S.config==="tiltrotor"?"悬停与过渡时间 t_hover":"悬停时长 t_hover","min",S.input.tHover,0.5):""}
+      ${vt?fld("inVC",S.config==="multirotor"?"垂直爬升率 V_c":"机翼模式爬升率 V_c","m/s",S.input.Vc,0.5):""}
+      ${S.config==="tiltrotor"?fld("inHT","转换高度 h_trans","m",S.input.hTrans,10):""}
+      ${vt?fld("inNB","旋翼数量 N","个",S.ov.NB??6,1):""}
+      ${vt?fld("inD","桨径 D","m",S.ov.D??0.38,0.01):""}
+    </div>
+    ${vt?`<div class="note" style="margin-top:10px">${S.config==="tiltrotor"
+      ? "倾转旋翼只在起降与转换时悬停（1–2 min 量级），爬升走机翼模式；不设持续竖直爬升要求。"
+      : "悬停功率 ∝ 桨盘面积^-0.5，桨径是比翼载更敏感的旋翼参数。"}</div>`:""}
+  </div>
+  <div class="card"><h3>选填 · 约束边界参数 <span class="tag">不填则跳过对应边界</span></h3>
+    <div class="grid g4">
+      ${fld("inVapp","进场速度 V_app","m/s",S.opt.Vapp,0.5,"留空=0.6V")}
+      ${fld("inGam","前飞爬升梯度 γ","%",S.opt.gamma,0.5,"如 5")}
+      ${fld("inGamO","单发爬升梯度 γ_OEI","%",S.opt.gammaOEI,0.5,"如 2.4")}
+      ${fld("inNTurn","盘旋过载 n","—",S.opt.nTurn,0.1,"如 2.5")}
+      ${fld("inSTO","起飞距离 S_TO","m",S.opt.STO,10,"如 600")}
+      ${fld("inSL","着陆距离 S_L","m",S.opt.SL,10,"如 900")}
+      ${fld("inVwind","抗风风速 V_wind","kt（节）",S.opt.Vwind,0.5,"如 10")}
+      ${fld("inVc2","最大爬升率","m/s",S.opt.VcMax,0.5,"如 5")}
+    </div>
+    <div class="note" style="margin-top:10px">这 8 项对应第七步的 8 类约束曲线。全部留空也能出图，只有悬停/巡航/失速三条基本边界。</div>
+  </div>`;
+}
+
+function gatherInput(){
+  const g=id=>{const el=document.getElementById(id); if(!el) return NaN;
+  const raws = el.value!=="" ? el.value : (el.dataset.def||"");
+  if(raws==="") return NaN;
+  const v=parseFloat(raws); return isFinite(v)?v:NaN;};
+  const I=S.input;
+  if(isFinite(g("inWL"))) I.WPL=g("inWL");
+  if(isFinite(g("inV"))) I.V=g("inV");
+  if(isFinite(g("inR"))) I.R=g("inR");
+  if(isFinite(g("inH"))) I.h=g("inH");
+  if(isFinite(g("inTH"))) I.tHover=g("inTH");
+  if(isFinite(g("inVC"))) I.Vc=g("inVC");
+  if(isFinite(g("inHT"))) I.hTrans=g("inHT");
+  if(isFinite(g("inNB"))) S.ov.NB=g("inNB");
+  if(isFinite(g("inD"))) S.ov.D=g("inD");
+  const O=S.opt;
+  ["Vapp","gamma","gammaOEI","gammaRoute","nTurn","STO","SL","Vwind","VcMax"].forEach(k=>{
+    const v=g("in"+k[0].toUpperCase()+k.slice(1));
+    if(isFinite(v)&&v>0) O[k]=v; else delete O[k];
+  });
+}
+
+/* 步骤 3 */
+function statCard(kind, fit, data, title, unit){
+  const N=data.points.length;
+  const bad=data.grade==="C";
+  return `<div class="card">
+    <h3>${title} <span class="tag">${data.points.length} 点 · ${bad?"参考":"公开"}</span></h3>
+    <div class="fitwrap">
+      <div><canvas class="chart" id="cv_${kind}"></canvas></div>
+      <div>
+        <div class="kv"><span>样本数 N</span><b>${N}</b></div>
+        <div class="kv"><span>曲线类型</span><b>${fit.interp?"分段插值（穿点）":"拟合"}</b></div>
+        <div class="kv"><span>适用范围</span><b>${fmt(Math.pow(10,fit.xmin),0)} – ${fmt(Math.pow(10,fit.xmax),0)} kg</b></div>
+        <div class="note ${bad?"warn":"ok"}" style="margin-top:8px">
+          ${bad?"<b>⚠ 该布局样本有限</b>，曲线只能当趋势看。":"<b>✓ 覆盖全重量段</b>，拟合 R² 可作参考。"}
+        </div>
+        <div class="note" style="margin-top:8px;font-size:11px">${data.src}</div>
+        <div style="margin-top:8px">
+          <label class="sub2">样本点（每行 重量,值）</label>
+          <textarea id="pt_${kind}" style="width:100%;height:64px;font-family:Consolas;font-size:11px;margin-top:3px;border:1px solid #d8d2c8;border-radius:6px;padding:5px">${data.points.map(p=>p.join(",")).join("\n")}</textarea>
+          <button class="btn ghost" style="margin-top:5px;padding:4px 10px;font-size:11.5px" onclick="applyPts('${kind}')">应用并重拟合</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function applyPts(kind){
+  const ta=document.getElementById("pt_"+kind);
+  const pts=ta.value.trim().split(/\n+/).map(l=>l.split(/[,\s]+/).map(Number)).filter(a=>a.length>=2&&isFinite(a[0])&&isFinite(a[1])&&a[0]>0&&a[1]>0);
+  if(pts.length<4) return alert("至少 4 个有效点");
+  if(kind==="fE") DB.emptyFrac[dbKey()].points=pts; else DB.ld[dbKey()].points=pts;
+  S.result=computeAll(); render();
+}
+
+function step3(){
+  const r=S.result||computeAll();
+  const fFe=fitCurve(DB.emptyFrac[dbKey()].points);
+  const fLd=fitCurve(DB.ld[dbKey()].points);
+  return `<h2>第三步 · 重量统计参数</h2>
+  <div class="hint">两个最敏感的量。曲线来自样本点的 log-log 二次拟合，外推时锁在样本端点，不会再失控</div>
+  ${statCard("fE",fFe,DB.emptyFrac[dbKey()],"空重分数 f_E（空重 ÷ 起飞总重）","—")}
+  ${ovBox("fE","空重分数 f_E",fFe,r.Wto)}
+  ${statCard("LD",fLd,DB.ld[dbKey()],"升阻比 L/D（巡航）","—")}
+  ${ovBox("LD","升阻比 L/D",fLd,r.Wto)}`;
+}
+function ovBox(key,name,fit,w){
+  if(!fit.ok) return "";
+  const pred=fit.predict(w);
+  const cur=S.ov[key]??pred.v;
+  const lo=pred.v*0.85, hi=pred.v*1.15;
+  return `<div class="card" style="border-left:4px solid var(--acc)">
+    <h3>确认取值：${name}</h3>
+    <div class="optrow">
+      <div style="flex:1;min-width:220px">
+        <div class="sub2">当前总重 ${fmt(w,1)} kg 处拟合值 <b>${fmt(cur,cur>1?2:3)}</b>${pred.extrap?"（外推）":""}</div>
+        <input type="range" min="${lo.toFixed(3)}" max="${hi.toFixed(3)}" step="0.001" value="${cur}"
+          oninput="document.getElementById('ov_${key}').value=this.value">
+      </div>
+      <div class="field" style="width:110px"><label>取值</label><input id="ov_${key}" type="number" step="0.001" value="${cur.toFixed(3)}"></div>
+      <button class="btn ghost" onclick="acceptStat('${key}')">采用</button>
+      <button class="btn ghost" onclick="delete S.ov['${key}'];S.result=computeAll();render()">恢复拟合值</button>
+    </div>
+  </div>`;
+}
+function acceptStat(key){
+  const v=parseFloat(document.getElementById("ov_"+key).value);
+  if(!isFinite(v)) return;
+  S.ov[key]=v; S.result=computeAll(); render();
+}
+
+/* 步骤 4 */
+function setBattMode(m){
+  commit4();                 // 先把已填的数收进 S.ov，切口径不丢当前输入
+  S.ov.battMode=m;
+  render();
+}
+function updateBattHint(){
+  const el=document.getElementById("battHint");
+  if(!el) return;
+  const g=id=>{const e=document.getElementById(id);return e?e.value:"";};
+  const bi=batteryFromPack(g("inPackV"),g("inPackAh"),g("inPackM"),g("inPackA"),g("inPackC"));
+  el.className = bi.ok ? "note" : "note warn";
+  el.innerHTML = bi.ok
+    ? `<b>换算结果：</b>${bi.msg}`
+    : `<b>电池包数据还不能用：</b>${bi.msg}`;
+}
+function battCard(){
+  const bm=S.ov.battMode??"spec";
+  const P0=DB.power[S.power];
+  const sel=k=>bm===k?"sel":"";
+  const bi=batteryFromPack(S.ov.packV??22.2,S.ov.packAh??10,S.ov.packM??1.3,
+                           S.ov.packA,S.ov.packC??10);
+  return `<div class="card"><h3>电池 <span class="tag">二选一</span></h3>
+    <div class="grid g4">
+      <div class="opt ${sel("spec")}" onclick="setBattMode('spec')">
+        <b>按参数</b><span>直接给比能量与比功率</span></div>
+      <div class="opt ${sel("pack")}" onclick="setBattMode('pack')">
+        <b>用我的电池包</b><span>填电压/容量/质量，自动换算</span></div>
+    </div>
+    ${bm==="spec"
+      ? `<div class="grid g4" style="margin-top:10px">
+          ${fld("inEbat","电池比能量 e_batt","Wh/kg",S.ov.e_batt??P0.e_batt,5,"比如 180")}
+          ${fld("inPbat","电池比功率","W/kg",S.ov.p_batt??P0.p_batt,50,"比如 1000")}
+          ${fld("inDoD","放电深度 DoD","—",S.ov.DoD??0.85,0.01,"比如 0.85")}
+        </div>
+        <div class="note" style="margin-top:9px">
+          电池质量取两项的较大值：按能量需要的质量、按峰值功率需要的质量。
+        </div>`
+      : `<div class="grid g4" style="margin-top:10px">
+          ${fldv("inPackV","标称电压 V","V",S.ov.packV??22.2,0.1,"比如 22.2（6S）")}
+          ${fldv("inPackAh","额定容量 Ah","Ah",S.ov.packAh??10,0.5,"比如 10 = 10000 mAh")}
+          ${fldv("inPackM","整包质量","kg",S.ov.packM??1.3,0.05,"整包，含外壳")}
+          ${fldv("inPackA","连续放电电流","A",S.ov.packA??"",1,"和下面填一个")}
+          ${fldv("inPackC","连续放电倍率","C",S.ov.packC??10,1,"比如 10C")}
+          ${fldv("inDoD2","放电深度 DoD","—",S.ov.DoD??0.85,0.01,"比如 0.85")}
+        </div>
+        <div class="${bi.ok?"note":"note warn"}" id="battHint" style="margin-top:10px"
+          ><b>${bi.ok?"换算结果：":"电池包数据还不能用："}</b>${bi.ok?bi.msg:bi.msg}</div>
+        <div class="note" style="margin-top:6px">
+          比能量 = 电压 × 容量 ÷ 整包质量；比功率 = 电压 × 连续电流 ÷ 整包质量。
+          电流与倍率只填一个，另一个留空。
+        </div>`}
+  </div>`;
+}
+
+function step4(){
+  const P0=DB.power[S.power];
+  const isElec=S.power==="electric";
+  const vt=S.config!=="fixedwing";
+  return `<h2>第四步 · 动力系统参数</h2>
+  <div class="hint">${P0.name}：${P0.src}</div>
+  <div class="card"><h3>${P0.name} <span class="tag">${P0.grade}</span></h3>
+    <div class="grid g4">
+      ${isElec?fld("inPmad","电机比功率","kW/kg",S.ov.pwMotor??P0.pw_motor,0.5)
+              :fld("inBsfc","比油耗 BSFC",P0.bsfcUnit,S.ov.bsfc??P0.bsfc,0.01)}
+      ${isElec?fld("inEtaP2","推进效率 η_prop","—",S.ov.etaP??0.78,0.01)
+              :fld("inPwM","功率密度 (P/m)_motor",P0.pwUnit,S.ov.pwMotor??P0.pw,0.5)}
+      ${isElec?fld("inEtaT2","传动效率 η_trans","—",S.ov.etaT??0.96,0.01)
+              :fld("inEtaP","推进效率 η_prop","—",S.ov.etaP??0.78,0.01)}
+      ${isElec?"":fld("inEtaT","传动效率 η_trans","—",S.ov.etaT??0.96,0.01)}
+    </div>
+    ${isElec?`<div class="note" style="margin-top:9px">
+      电机比功率只用于核对功率约束，暂不进入重量闭合（电机重量已含在空重分数里）。</div>`:""}
+  </div>
+  ${isElec?battCard():""}
+  <div class="card"><h3>常用覆盖项</h3>
+    <div class="grid g4">
+      ${fld("inFM","旋翼品质因数 FM","—",S.ov.FM??0.70,0.01)}
+      ${fld("inRes","能量裕度 reserve","—",S.ov.reserve??0.20,0.01)}
+      ${fld("inAR","展弦比 AR","—",S.ov.AR??6.0,0.5)}
+      ${fld("inCL","最大升力系数 C_Lmax","—",S.ov.CLmax??1.4,0.05)}
+      ${fld("inAux","机载设备功率","W",S.ov.P_aux??40,5,"比如 40")}
+      ${fld("inKTrans","过渡功率系数","—",S.ov.kTrans??1.15,0.01,"比如 1.15")}
+      ${vt?fld("inHT4","转换高度","m",S.input.hTrans,10,"比如 50"):""}
+    </div>
+    <div class="note" style="margin-top:9px">过渡功率系数只在倾转旋翼上有用；机载设备功率按全任务时长计入能量。</div>
+  </div>
+  ${engFitCard()}
+  <div style="text-align:right"><button class="btn acc" onclick="commit4()">保存并计算总重 →</button></div>`;
+}
+
+function engFitCard(){
+  const P0=DB.power[S.power];
+  if(!P0.bsfcPts) return "";
+  const f=fitCurve(P0.bsfcPts);
+  return `<div class="card"><h3>发动机参数拟合 <span class="tag">按功率</span></h3>
+    <div class="fitwrap">
+      <div><canvas class="chart" id="cvEng" style="height:230px"></canvas></div>
+      <div>
+        <div class="kv"><span>样本数</span><b>${P0.bsfcPts.length}</b></div>
+        <div class="kv"><span>拟合 R²</span><b>${f.ok?f.r2.toFixed(3):"—"}</b></div>
+        <div class="kv"><span>功率范围</span><b>${P0.bsfcPts[0][0]} – ${P0.bsfcPts[P0.bsfcPts.length-1][0]} kW</b></div>
+        <div class="note" style="margin-top:8px">${P0.src}</div>
+        <div class="note" style="margin-top:8px">
+          比油耗随功率增大而下降——大功率发动机效率更高。上方输入框可覆盖拟合值。
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function commit4(){
+  const g=id=>{const el=document.getElementById(id);return el?parseFloat(el.value):NaN;};
+  const set=(k,v)=>{if(isFinite(v))S.ov[k]=v;};
+  set("e_batt",g("inEbat")); set("bsfc",g("inBsfc"));
+  set("DoD",g("inDoD")??g("inDoD2"));
+  set("p_batt",g("inPbat")); set("pwMotor",g("inPwM")??g("inPmad"));
+  set("etaP",g("inEtaP")??g("inEtaP2")); set("etaT",g("inEtaT")??g("inEtaT2"));
+  set("packV",g("inPackV")); set("packAh",g("inPackAh")); set("packMass",g("inPackM"));
+  set("packA",g("inPackA")); set("packC",g("inPackC"));
+  set("FM",g("inFM")); set("reserve",g("inRes")); set("AR",g("inAR")); set("CLmax",g("inCL"));
+  set("P_aux",g("inAux")); set("kTrans",g("inKTrans")); set("hTrans",g("inHT4"));
+  S.result=computeAll(); goStep(5);
+}
+function openTrace(key){
+  const p = S.result?.p?.[key];
+  if(!p) return;
+  const deps=(p.deps||[]).filter(d=>S.result.p[d])
+    .map(d=>`<span class="dep" onclick="openTrace('${d}')">${d}</span>`).join("");
+  document.getElementById("traceBody").innerHTML=`
+    <div class="trace-sym">${p.sym}</div>
+    <h3>${p.name}</h3>
+    <div class="trace-row"><span>数值</span><span>${fmtG(p.v,5)} ${p.unit||""}</span></div>
+    <div class="trace-row"><span>来源</span><span><span class="badge b-${p.src==="input"?"in":p.src==="calc"?"calc":p.src==="stat"?"stat":"spec"}">${SRC_LABEL[p.src]||p.src}</span></span></div>
+    ${p.zh?`<div class="fml"><span class="lbl">中文公式</span>${p.zh}</div>`:""}
+    ${p.symF?`<div class="fml"><span class="lbl">符号表达式</span><span class="sym">${p.symF}</span></div>`:""}
+    ${p.note?`<div class="note">${p.note}</div>`:""}
+    ${deps?`<div style="margin-top:12px"><div class="sub2" style="margin-bottom:2px">上游参数（点击继续追溯）</div>${deps}</div>`:""}`;
+  document.getElementById("tracePanel").classList.add("open");
+}
+function closeTrace(){document.getElementById("tracePanel").classList.remove("open");}
+
+/* ============================================================
+   导航
+   ============================================================ */
+const STEP_NAMES=["选择构型","基本参数","重量统计","动力参数","重量闭合","剖面功率","约束设计","升力系数","参数总表"];
+let MAX_STEP=1;
+function renderSteps(){
+  document.getElementById("steps").innerHTML=STEP_NAMES.map((n,i)=>{
+    const k=i+1, cls=k===S.step?"on":(k<=MAX_STEP?"done":"");
+    return `<button class="${cls}" onclick="goStep(${k})">${k}. ${n}</button>`;
+  }).join("");
+  document.getElementById("navMid").textContent=`第 ${S.step} / 9 步`;
+  document.getElementById("btnPrev").disabled=S.step<=1;
+  document.getElementById("btnNext").disabled=S.step>=9;
+}
+function goStep(k){
+  if(k>MAX_STEP+1) return;
+  S.step=k; MAX_STEP=Math.max(MAX_STEP,k);
+  if(k>=3 && S.power && S.layout && S.config){ try{S.result=computeAll();}catch(e){console.error(e);} }
+  render(); window.scrollTo({top:0,behavior:"smooth"});
+}
+function nextStep(){
+  if(S.step===1 && (!S.power||!S.layout||!S.config)) return alert("请先完成三项选择");
+  if(S.step===2) gatherInput();
+  goStep(S.step+1);
+}
+function prevStep(){ if(S.step>1) goStep(S.step-1); }
+
+/* ============================================================
+   绘图
+   ============================================================ */
+function dpr(cv,w,h){
+  const d=window.devicePixelRatio||1;
+  cv.width=w*d; cv.height=h*d; cv.style.width=w+"px"; cv.style.height=h+"px";
+  const c=cv.getContext("2d"); c.scale(d,d); return c;
+}
+function drawFit(cv, fit, data){
+  const W=cv.clientWidth||640, H=parseInt(cv.style.height)||290;
+  const c=dpr(cv,W,H), pad={l:54,r:14,t:14,b:34};
+  const pts=data.points;
+  const xs=pts.map(p=>Math.log10(p[0])), ys=pts.map(p=>Math.log10(p[1]));
+  const x0=Math.min(...xs)-0.15, x1=Math.max(...xs)+0.15;
+  const y0=Math.min(...ys)-0.12, y1=Math.max(...ys)+0.12;
+  const X=v=>pad.l+(v-x0)/(x1-x0)*(W-pad.l-pad.r);
+  const Y=v=>H-pad.b-(v-y0)/(y1-y0)*(H-pad.t-pad.b);
+  c.clearRect(0,0,W,H);
+  c.strokeStyle="#eee9e2"; c.font="10.5px Consolas"; c.fillStyle="#8a8f98";
+  for(let i=0;i<=5;i++){
+    const gx=x0+(x1-x0)*i/5, gy=y0+(y1-y0)*i/5;
+    c.beginPath();c.moveTo(X(gx),Y(y0));c.lineTo(X(gx),Y(y1));c.stroke();
+    c.beginPath();c.moveTo(X(x0),Y(gy));c.lineTo(X(x1),Y(gy));c.stroke();
+    c.textAlign="center"; c.fillText(Math.pow(10,gx).toFixed(0), X(gx), H-13);
+    c.textAlign="right"; c.fillText(Math.pow(10,gy).toPrecision(2), X(x0)-5, Y(gy)+3);
+  }
+  if(fit.ok){
+    c.beginPath(); let first=true;
+    for(let i=0;i<=80;i++){
+      const wx=Math.pow(10,x0+(x1-x0)*i/80);
+      const p=fit.predict(wx);
+      if(!isFinite(p.v)||p.v<=0) continue;
+      const yy=Y(Math.log10(p.v));
+      first?(c.moveTo(X(Math.log10(wx)),yy),first=false):c.lineTo(X(Math.log10(wx)),yy);
+    }
+    c.strokeStyle="#c05621"; c.lineWidth=2.2; c.stroke();
+  }
+  for(const [wx,vy] of pts){
+    c.beginPath(); c.arc(X(Math.log10(wx)),Y(Math.log10(vy)),3.4,0,7);
+    c.fillStyle="#16324f"; c.fill(); c.strokeStyle="#fff"; c.lineWidth=1.1; c.stroke();
+  }
+  c.fillStyle="#6b7280"; c.font="11.5px 'Microsoft YaHei'";
+  c.textAlign="center"; c.fillText("起飞总重 W_TO [kg，对数轴]", W/2, H-1);
+  c.save(); c.translate(12,H/2); c.rotate(-Math.PI/2); c.textAlign="center";
+  c.fillText("纵轴（对数）", 0,0); c.restore();
+}
+
+function drawConstraints(cv, res, ws, wp){
+  // 防护：空值/NaN 会让整张画布失效
+  if(!isFinite(ws)||ws<=0) ws=20;
+  if(!isFinite(wp)||wp<=0) wp=10;
+  const W=cv.clientWidth||680, H=parseInt(cv.style.height)||320;
+  const c=dpr(cv,W,H), pad={l:64,r:16,t:16,b:40};
+  const cs=res.constraints||[];
+  const vVals=cs.filter(x=>x.type==="v").map(x=>x.val).filter(v=>isFinite(v)&&v>0);
+  const hVals=cs.filter(x=>x.type==="h").map(x=>x.val).filter(v=>isFinite(v)&&v>0);
+  const curves=cs.filter(x=>x.type==="c");
+
+  // 先用竖线与设计点定横轴
+  const vmax=Math.max(ws, ...vVals, 10);
+  const x1=Math.max(60, vmax*1.1);
+  const x0=0;
+  // 纵轴：横线 + 曲线在可视区间内的值
+  let ymax=Math.max(wp, ...hVals, 5);
+  for(const cu of curves){
+    for(const [cx,cy] of cu.samples){
+      if(cx>=x0 && cx<=x1 && isFinite(cy) && cy>0) ymax=Math.max(ymax, cy);
+    }
+  }
+  const y1=Math.max(5, ymax*1.25), y0=0;
+  const X=v=>pad.l+(v-x0)/(x1-x0)*(W-pad.l-pad.r);
+  const Y=v=>H-pad.b-(v-y0)/(y1-y0)*(H-pad.t-pad.b);
+  c.clearRect(0,0,W,H);
+
+  const niceStep=(span)=>{const raw=span/5; const pw=Math.pow(10,Math.floor(Math.log10(raw))); const n=raw/pw;
+    return (n<=1?1:n<=2?2:n<=5?5:10)*pw;};
+  const sx=niceStep(x1-x0), sy=niceStep(y1-y0);
+  c.strokeStyle="#eee9e2"; c.font="10.5px Consolas"; c.fillStyle="#8a8f98";
+  for(let v=0; v<=x1+1e-9; v+=sx){
+    c.beginPath();c.moveTo(X(v),Y(y0));c.lineTo(X(v),Y(y1));c.stroke();
+    c.textAlign="center"; c.fillText(v>=1000?(v/1000).toFixed(0)+"k":(sx<1?v.toFixed(1):v.toFixed(0)),X(v),H-19);
+  }
+  for(let v=0; v<=y1+1e-9; v+=sy){
+    c.beginPath();c.moveTo(X(x0),Y(v));c.lineTo(X(x1),Y(v));c.stroke();
+    c.textAlign="right"; c.fillText(v>=1000?(v/1000).toFixed(0)+"k":(sy<1?v.toFixed(1):v.toFixed(0)),X(x0)-6,Y(v)+3);
+  }
+
+  // 可行域（以设计点所在 W/S 处各约束的最小 W/P 为上界）
+  const f=feasible(res,ws,wp);
+  const mWS=Math.min(f.maxWS,x1), mWP=Math.min(f.maxWP,y1);
+  if(mWS>x0&&mWP>y0){c.fillStyle="rgba(47,93,80,.10)";c.fillRect(X(x0),Y(mWP),X(mWS)-X(x0),Y(y0)-Y(mWP));}
+
+  // 先画竖线/横线
+  cs.filter(x=>x.type!=="c").forEach(cc=>{
+    c.strokeStyle=cc.color; c.lineWidth=2; c.setLineDash(cc.type==="v"?[]:[]);
+    if(cc.type==="v"){
+      if(cc.val<x0||cc.val>x1) return;
+      c.beginPath();c.moveTo(X(cc.val),Y(y0));c.lineTo(X(cc.val),Y(y1));c.stroke();
+      c.save(); c.translate(X(cc.val)-4, Y(y1)+6); c.rotate(-Math.PI/2);
+      c.fillStyle=cc.color; c.font="10.5px 'Microsoft YaHei'"; c.textAlign="left";
+      c.fillText(cc.name, 0, 0); c.restore();
+    }else{
+      if(cc.val<y0||cc.val>y1) return;
+      c.beginPath();c.moveTo(X(x0),Y(cc.val));c.lineTo(X(x1),Y(cc.val));c.stroke();
+      c.fillStyle=cc.color; c.font="10.5px 'Microsoft YaHei'"; c.textAlign="left";
+      c.fillText(cc.name, X(x0)+5, Y(cc.val)-4);
+    }
+  });
+  // 再画曲线
+  curves.forEach(cc=>{
+    c.strokeStyle=cc.color; c.lineWidth=2.2; c.setLineDash([7,4]);
+    c.beginPath(); let first=true, lastPt=null;
+    for(const [cx,cy] of cc.samples){
+      if(!isFinite(cx)||!isFinite(cy)||cx<x0||cx>x1||cy<y0||cy>y1){ first=true; continue; }
+      const px=X(cx), py=Y(cy);
+      first?(c.moveTo(px,py),first=false):c.lineTo(px,py);
+      lastPt=[px,py];
+    }
+    c.stroke(); c.setLineDash([]);
+    if(lastPt){
+      c.fillStyle=cc.color; c.font="10.5px 'Microsoft YaHei'"; c.textAlign="right";
+      c.fillText(cc.name, X(x1)-4, lastPt[1]-6);
+    }
+  });
+
+  // 设计点
+  const px=X(ws), py=Y(wp);
+  c.beginPath();c.arc(px,py,7,0,7);
+  c.fillStyle=f.ok?"#9c3024":"#7a2a1f"; c.fill();
+  c.strokeStyle="#fff"; c.lineWidth=2; c.stroke();
+  c.fillStyle=f.ok?"#9c3024":"#7a2a1f"; c.font="11.5px 'Microsoft YaHei'"; c.textAlign="left";
+  c.fillText(f.ok?"设计点":"不可行", px+11, py+4);
+
+  c.strokeStyle="#1f2328"; c.lineWidth=1;
+  c.beginPath();c.moveTo(X(x0),Y(y0));c.lineTo(X(x1),Y(y0));c.stroke();
+  c.beginPath();c.moveTo(X(x0),Y(y0));c.lineTo(X(x0),Y(y1));c.stroke();
+  c.fillStyle="#6b7280"; c.font="11.5px 'Microsoft YaHei'"; c.textAlign="center";
+  c.fillText("翼载 W/S  [kg/m²]", W/2, H-3);
+  c.save(); c.translate(14,H/2); c.rotate(-Math.PI/2); c.textAlign="center";
+  c.fillText("功率载荷 W/P  [kg/kW]", 0,0); c.restore();
+  cv._map={pad,x0,x1,y0,y1,W,H,X,Y};
+  return f;
+}
+
+function drawConv(cv, its){
+  const W=cv.clientWidth||320, H=parseInt(cv.style.height)||240;
+  const c=dpr(cv,W,H), pad={l:52,r:12,t:14,b:26};
+  const ys=its.map(t=>t.Wto);
+  const y0=Math.min(...ys)*0.97, y1=Math.max(...ys)*1.03;
+  const x0=0.5, x1=Math.max(3,its.length+0.5);
+  const X=v=>pad.l+(v-x0)/(x1-x0)*(W-pad.l-pad.r);
+  const Y=v=>H-pad.b-(v-y0)/(y1-y0)*(H-pad.t-pad.b);
+  c.clearRect(0,0,W,H);
+  c.strokeStyle="#eee9e2"; c.font="10px Consolas"; c.fillStyle="#8a8f98";
+  for(let i=0;i<=4;i++){
+    const gv=y0+(y1-y0)*i/4;
+    c.beginPath();c.moveTo(X(x0),Y(gv));c.lineTo(X(x1),Y(gv));c.stroke();
+    c.textAlign="right"; c.fillText(gv.toFixed(2),X(x0)-5,Y(gv)+3);
+  }
+  c.beginPath();
+  its.forEach((t,i)=>{ const x=X(i+1),y=Y(t.Wto); i?c.lineTo(x,y):c.moveTo(x,y); });
+  c.strokeStyle="#c05621"; c.lineWidth=2.1; c.stroke();
+  its.forEach((t,i)=>{
+    c.beginPath();c.arc(X(i+1),Y(t.Wto),3.2,0,7); c.fillStyle="#16324f";c.fill();
+    c.strokeStyle="#fff";c.lineWidth=1;c.stroke();
+  });
+  c.fillStyle="#6b7280";c.font="11px 'Microsoft YaHei'";c.textAlign="center";
+  c.fillText("迭代轮次",W/2,H-4);
+}
+
+/* ---------- 步骤 5–9 ---------- */
+function kpi(label,val,unit,key){
+  return `<div class="card" style="padding:13px 15px;margin:0">
+    <div class="sub2">${label}</div>
+    <div style="font-size:21px;font-weight:700;color:#16324f;font-family:Consolas;margin-top:2px">${val}
+      <span style="font-size:11.5px;color:#6b7280;font-weight:400">${unit}</span></div>
+    ${key?`<span class="clickable" style="font-size:11px" onclick="openTrace('${key}')">溯源</span>`:""}
+  </div>`;
+}
+
+function step5(){
+  const r=S.result||computeAll();
+  const rows=r.iters.map((t,i)=>`<tr>
+    <td class="num">${t.k}</td><td class="num">${fmt(t.Wto,3)}</td>
+    <td class="num">${fmt(t.fE,4)}</td><td class="num">${fmt(t.LD,2)}</td>
+    <td class="num">${fmt(r.isElec?t.mB:t.fuel,3)}</td>
+    <td class="num">${fmt(t.resid,3)}</td>
+    <td class="num">${fmt(t.conv,3)}</td></tr>`).join("");
+  const bad=!r.valid;
+  return `<h2>第五步 · 重量闭合</h2>
+  ${bad?`<div class="note warn" style="margin-bottom:13px;font-size:13.5px">
+    <b>✗ 无解：在载重的 1–60 倍范围内找不到自洽总重。</b><br>
+    下面不再给出总重、功率、面积等指标——它们都由未闭合的总重推出来，填进去会被误当成方案。<br>
+    可调方向：加大桨径、缩短悬停时间、提高电池比能量、把空重分数填得更确切（比如 0.55）、降低航程或速度。</div>`:""}
+  <div class="hint">${r.isElec
+    ?"电机：电池质量是总重的函数，每轮把新总重回填能量计算。下表是扫描找到区间后二分收缩的真实过程"
+    :"油机：燃油分数与总重基本无关，几轮即收敛（空重分数的非线性需要吸收）。下表是真实二分过程"}</div>
+  ${bad?"":`<div class="card"><h3>迭代过程 <span class="tag">扫描 + 二分，真实记录</span></h3>
+    <div class="fitwrap">
+      <div style="overflow:auto;max-height:300px"><table>
+        <thead><tr><th>轮次</th><th class="num">W_TO kg</th><th class="num">f_E</th><th class="num">L/D</th>
+        <th class="num">${r.isElec?"电池":"燃油"} kg</th><th class="num">残差 kg</th><th class="num">区间半宽 kg</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <div><canvas class="chart" id="cvConv" style="height:240px"></canvas></div>
+    </div>
+  </div>
+  <div class="grid g4">
+    ${kpi("起飞总重 W_TO",fmt(r.Wto,3),"kg","W_TO")}
+    ${kpi("空重 W_E",fmt(r.WE,3),"kg","W_E")}
+    ${r.isElec?kpi("电池 m_batt",fmt(r.p.m_batt.v,3),"kg","m_batt")
+              :kpi("燃油 W_fuel",fmt(r.p.W_fuel.v,3),"kg","W_fuel")}
+    ${kpi("峰值功率",fmt(r.Ppk/1000,2),"kW","Ppk")}
+  </div>`}`;
+}
+
+function step6(){
+  const r=S.result||computeAll();
+  if(!r.valid){
+    return `<h2>第六步 · 剖面功率</h2>
+    <div class="note warn" style="font-size:13.5px"><b>✗ 重量没有闭合，剖面无意义。</b><br>
+    功率与能量都按总重算，总重没定下来就不会有可信的剖面。请回第五步调整参数。</div>`;
+  }
+  const kW=v=>fmt(v/1000,2);
+  const en=v=>v>=1000?fmt(v/1000,1)+" kWh":fmt(v,1)+" Wh";
+  const seg=r.profile||[];
+  const totE=seg.reduce((a,s)=>a+s[1]*s[2]/3600,0);
+  const totT=seg.reduce((a,s)=>a+s[2],0);
+  const fseg=r.isElec?null:(r.fuelSegs||[]);
+  const sumF=fseg?fseg.reduce((a,s)=>a+s[1],0):0;
+  return `<h2>第六步 · 剖面功率</h2>
+  <div class="hint">这段剖面就是重量闭合里用的同一份：功率×时长=能量，逐项相加等于电池/燃油质量</div>
+  <div class="card"><h3>剖面功率与能量 <span class="tag">${r.isElec?"电池按能量或峰值功率取大":"燃油逐项相加"}</span></h3>
+    <table><thead><tr><th>阶段</th><th class="num">功率 kW</th><th class="num">时长 s</th>
+    <th class="num">能量 Wh</th><th>说明</th></tr></thead><tbody>
+    ${seg.map(([n,p,t,d])=>`<tr><td>${n}</td><td class="num">${kW(p)}</td>
+      <td class="num">${fmt(t,0)}</td><td class="num">${en(p*t/3600)}</td>
+      <td class="sub2">${d}</td></tr>`).join("")}
+    <tr class="total"><td>合计</td><td class="num">—</td><td class="num">${fmt(totT,0)}</td>
+      <td class="num">${en(totE)}</td><td class="sub2">${r.isElec
+        ? `再乘能量裕度 ${fmt((S.ov.reserve??0.2)*100,0)}% = ${en(r.Et)}`
+        : `轴功口径；对应燃油 ${fmt(sumF,1)} kg（见下表）`}</td></tr>
+  </tbody></table>
+  ${r.isElec&&r.mBattP>r.mBattE*1.02?`<div class="note" style="margin-top:9px">
+    电池质量由放电功率决定（峰值 ${fmt(r.Ppk/1000,2)} kW → ${fmt(r.mBattP,2)} kg），不是能量（${fmt(r.mBattE,2)} kg）。</div>`:""}
+  </div>
+  ${fseg?`<div class="card"><h3>燃油分配 <span class="tag">逐项相加 = 总燃油</span></h3><table>
+    <thead><tr><th>项目</th><th class="num">燃油 kg</th><th class="num">占比</th></tr></thead><tbody>
+    ${fseg.map(([n,v])=>`<tr><td>${n}</td><td class="num">${fmt(v,1)}</td>
+      <td class="num">${fmt(v/(r.p.W_fuel.v||1)*100,1)}%</td></tr>`).join("")}
+    <tr class="total"><td>合计</td><td class="num">${fmt(r.p.W_fuel.v,1)}</td><td class="num">100%</td></tr>
+  </tbody></table></div>`:""}
+  <div class="grid g3">
+    ${kpi("悬停功率",kW(r.Phov),"kW","Phov")}
+    ${kpi("巡航功率",kW(r.Pcr),"kW","Pcr")}
+    ${kpi("峰值功率",kW(r.Ppk),"kW","Ppk")}
+  </div>`;
+}
+
+function step7(){
+  const r=S.result||computeAll();
+  if(!r.valid){
+    return `<h2>第七步 · 约束边界与设计点</h2>
+    <div class="note warn" style="font-size:13.5px"><b>✗ 重量没有闭合，约束图不画。</b><br>
+    约束图上的可行域是按当前总重算出来的，总重没定下来就没有意义。</div>`;
+  }
+  const ws0=S.ov.WS??r.WS;
+  const f=feasible(r, ws0, 1e9);
+  const ws=ws0;
+  const wpRail=feasible(r, ws, 1e9).maxWP;
+  const wp=S.ov.WP??(isFinite(wpRail)&&wpRail<1e8?wpRail*0.85:10);
+  const lines=r.constraints.map(c=>`<span><i style="background:${c.color}"></i>${c.name}</span>`).join("");
+  return `<h2>第七步 · 约束边界与设计点</h2>
+  <div class="hint">竖线是翼载上限，横线是功率载荷上限，阴影是可行域。可点图、拖滑条或直接输数</div>
+  <div class="card">
+    <canvas class="chart" id="cvCons" style="height:340px;max-width:780px"></canvas>
+    <div class="legend">${lines}</div>
+  </div>
+  <div class="card"><h3>选点</h3>
+    <div class="grid g2">
+      <div class="field"><label>翼载 W/S　<span class="clickable" onclick="openTrace('W_S')">?</span></label>
+        <input type="range" id="rgWS" min="5" max="60" step="0.5" value="${ws.toFixed(1)}"
+          oninput="document.getElementById('inWS').value=this.value;setPt()">
+        <input id="inWS" type="number" step="0.5" value="${ws.toFixed(1)}"
+          oninput="document.getElementById('rgWS').value=this.value;setPt()">
+        <div class="unit">kg/m²（上限 ${fmt(f.maxWS,1)}）</div></div>
+      <div class="field"><label>功率载荷 W/P</label>
+        <input type="range" id="rgWP" min="2" max="60" step="0.5" value="${wp.toFixed(1)}"
+          oninput="document.getElementById('inWP').value=this.value;setPt()">
+        <input id="inWP" type="number" step="0.5" value="${wp.toFixed(1)}"
+          oninput="document.getElementById('rgWP').value=this.value;setPt()">
+        <div class="unit">kg/kW（上限 ${fmt(f.maxWP,1)}）</div></div>
+    </div>
+    <div id="feasMsg" style="margin-top:13px"></div>
+  </div>`;
+}
+function setPt(){
+  let ws=parseFloat(document.getElementById("inWS").value);
+  let wp=parseFloat(document.getElementById("inWP").value);
+  if(!isFinite(ws)||ws<=0){ ws=20; document.getElementById("inWS").value=ws; document.getElementById("rgWS").value=ws; }
+  if(!isFinite(wp)||wp<=0){
+    const f0=feasible(S.result, ws, 1e9);
+    wp=isFinite(f0.maxWP)&&f0.maxWP<1e8 ? f0.maxWP*0.85 : 10;
+    document.getElementById("inWP").value=wp.toFixed(1);
+    document.getElementById("rgWP").value=wp.toFixed(1);
+  }
+  S.ov.WS=ws; S.ov.WP=wp;
+  const r=S.result, f=feasible(r,ws,wp);
+  const box=document.getElementById("feasMsg");
+  box.innerHTML = f.ok
+    ? `<div class="note ok">✓ 可行：翼载 ${fmt(ws,1)} ≤ ${fmt(f.maxWS,1)}，功率载荷 ${fmt(wp,1)} ≤ ${fmt(f.maxWP,1)}</div>`
+    : `<div class="note warn">✗ 不可行：${ws>f.maxWS?`翼载超出上限 ${fmt(f.maxWS,1)}；`:""}${wp>f.maxWP?`功率载荷超出上限 ${fmt(f.maxWP,1)}`:""}</div>`;
+  drawConstraints(document.getElementById("cvCons"), r, ws, wp);
+}
+
+function step8(){
+  const r=S.result||computeAll();
+  if(!r.valid){
+    return `<h2>第八步 · 升力系数与失速速度</h2>
+    <div class="note warn" style="font-size:13.5px"><b>✗ 重量没有闭合，升力系数与失速速度都不成立。</b><br>
+    这两个量都由总重与机翼面积推出来。</div>`;
+  }
+  const ws=r.WS, Sw=r.S;
+  const CLc=r.CLc;
+  const CLi=r.CLi;
+  const line=(key,sym,name,zh,symF,val)=>`
+    <div class="trace-row"><span>${name} <span class="clickable" onclick="openTrace('${key}')">${sym}</span></span>
+      <span><b>${fmt(val,3)}</b></span></div>
+    <div class="sub2" style="font-family:Consolas;padding-bottom:5px">${symF}</div>`;
+  return `<h2>第八步 · 升力系数与失速速度</h2>
+  <div class="hint">注意：失速速度不是输入，是由翼载和最大升力系数反推出来的结果</div>
+  <div class="card"><h3>推导链</h3>
+    ${line("C_Lc","C_Lc","巡航升力系数","","C_Lc = 2W_c/(ρV²S)",CLc)}
+    ${line("C_Li","C_li","翼型设计升力系数","","C_li = C_Lc/0.95/0.90",CLi)}
+    ${line("Vstall","V_s","失速速度","","V_s = √(2(W/S)g/(ρ0·C_Lmax))",r.Vstall)}
+  </div>
+  <div class="grid g4">
+    ${kpi("机翼面积 S",fmt(Sw,3),"m²","S_wing")}
+    ${kpi("翼展 b（参考）",fmt(Math.sqrt((S.ov.AR??6)*Sw),2),"m","b")}
+    ${kpi("失速速度",fmt(r.Vstall,1),"m/s","Vstall")}
+    ${kpi("翼型设计 C_li",fmt(CLi,3),"—","C_Li")}
+  </div>
+  <div class="note" style="margin-top:12px">
+    0.95 近似机身与尾翼贡献，0.90 是三维机翼效应。取 ${fmt(ws,1)} kg/m² 翼载时，
+    失速速度 ${fmt(r.Vstall,1)} m/s，约为巡航速度的 ${fmt(r.Vstall/(S.input.V/3.6)*100,0)}%。
+  </div>`;
+}
+
+function step9(){
+  const r=S.result||computeAll();
+  const bad=!r.valid;
+  const order=["WPL","V","R","h","rho","W_TO","W_E","W_fuel","m_batt","fE","LD",
+               "Phov","Pcl","Pcr","Ppk","W_S","S_wing","b","AR","Vstall","C_Lc","C_Li","FM"];
+  const shown=order.filter(k=>{
+    if(k==="m_batt") return r.isElec;
+    if(k==="W_fuel") return !r.isElec;
+    if((k==="Phov"||k==="Pcl") && !r.isVTOL) return false;
+    return true;
+  });
+  const rows=shown.filter(k=>r.p[k]).map(k=>{
+    const p=r.p[k];
+    const cls=p.src==="input"?"b-in":p.src==="stat"?"b-stat":p.src==="spec"?"b-spec":"b-calc";
+    const val=bad&&(p.src==="calc")?"—":fmtG(p.v,5);
+    return `<tr onclick="openTrace('${k}')" style="cursor:pointer">
+      <td style="font-family:Consolas;color:#16324f;font-weight:600">${p.sym}</td>
+      <td>${p.name}</td><td class="num">${val}</td><td>${p.unit||""}</td>
+      <td><span class="badge ${cls}">${SRC_LABEL[p.src]||p.src}</span></td></tr>`;
+  }).join("");
+  return `<h2>第九步 · 参数总表</h2>
+  ${bad?`<div class="note warn" style="margin-bottom:12px"><b>✗ 重量没有闭合，下表里所有「计算」项都无效（已显示 —）。</b><br>
+    只剩输入项与统计项可以参考。请回第五步按提示调参。</div>`:""}
+  <div class="hint">点任意一行打开溯源卡片：中文公式 + 符号表达式 + 上游参数</div>
+  <div class="card"><table>
+    <thead><tr><th>符号</th><th>含义</th><th class="num">数值</th><th>单位</th><th>来源</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+  <div class="card"><h3>结果摘要</h3>
+    <div class="kv"><span>起飞总重</span><b>${bad?"无解":fmt(r.Wto,3)+" kg"}</b></div>
+    <div class="kv"><span>空重</span><b>${bad?"—":fmt(r.WE,3)+" kg"}</b></div>
+    <div class="kv"><span>${r.isElec?"电池":"燃油"}</span><b>${bad?"—":fmt(r.isElec?r.p.m_batt.v:r.p.W_fuel.v,3)+" kg"}</b></div>
+    <div class="kv"><span>翼载 / 机翼面积</span><b>${fmt(r.WS,1)} kg/m² / ${bad?"—":fmt(r.S,3)+" m²"}</b></div>
+    <div class="kv"><span>失速速度</span><b>${bad?"—":fmt(r.Vstall,1)+" m/s"}</b></div>
+  </div>
+  ${verifyUI()}
+  <div style="display:flex;gap:11px"><button class="btn" onclick="window.print()">打印 / 另存 PDF</button>
+    <button class="btn ghost" onclick="exportTxt()">导出文本</button></div>`;
+}
+
+/* 9 架实机：每架用自己的载重、巡航速度、航程、高度，只有 f_E 与 L/D 取自统计库 */
+const VSET = [
+  ["Cessna 172S","piston",237,233,1185,2000,1157],
+  ["Piper PA-28-181","piston",271,230,900,1500,1157],
+  ["Diamond DA40","piston",238,260,1300,2000,1150],
+  ["Cessna 182T","piston",272,270,1720,2000,1406],
+  ["Cirrus SR22","piston",362,340,1800,2500,1633],
+  ["King Air 350","turboprop",638,580,3300,9000,6804],
+  ["Boeing 737-800","turbofan",15400,840,5400,11000,79016],
+  ["Airbus A330-300","turbofan",36000,871,11750,11500,242000],
+  ["Bombardier Q400","turboprop",7000,667,2040,7600,29574]
+];
+function verifyUI(){
+  const rows=VSET.map((v,i)=>`<tr>
+      <td>${v[0]}</td><td class="num">${v[2]}</td><td class="num">${v[3]}</td>
+      <td class="num">${v[4]}</td><td class="num">${v[5]}</td>
+      <td class="num">${v[6]}</td><td id="vO${i}" class="num">—</td></tr>`).join("");
+  return `<div class="card"><h3>实机单点核对 · 9 架 <span class="tag">不是适航意义上的验证</span></h3>
+    <p class="sub2" style="margin:0 0 9px">每架都按它自己的载重、巡航速度、航程与高度算，
+    只有空重分数与升阻比取自统计库——所以偏差归属统计曲线，不是参数抄错。</p>
+    <table><thead><tr><th>机型</th><th class="num">载重 kg</th><th class="num">V km/h</th>
+      <th class="num">R km</th><th class="num">h m</th><th class="num">实际 W_TO kg</th>
+      <th class="num">预测 / 偏差</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <button class="btn ghost" style="margin-top:10px" onclick="runVerify()">跑一遍 9 架</button>
+    <div id="vSum"></div></div>`;
+}
+function runVerify(){
+  const save={WPL:S.input.WPL,V:S.input.V,R:S.input.R,h:S.input.h,config:S.config,
+              layout:S.layout,category:S.category};
+  let sum=0, n=0, ok15=0;
+  VSET.forEach((v,i)=>{
+    const [name,pw,PL,Vv,R,h,Wact]=v;
+    const out=document.getElementById(`vO${i}`);
+    if(!out) return;
+    const saveP=S.power;
+    S.power=pw; S.config="fixedwing"; S.layout="normal"; S.category="manned";
+    S.input.WPL=PL; S.input.V=Vv; S.input.R=R; S.input.h=h;
+    let r; try{ r=computeAll(); }catch(e){ out.textContent="出错"; S.power=saveP; return; }
+    S.power=saveP;
+    if(!r.valid){ out.innerHTML=`<span style="color:#9c3024">无解</span>`; return; }
+    const err=(r.Wto-Wact)/Wact*100;
+    sum+=Math.abs(err); n++; if(Math.abs(err)<=15) ok15++;
+    out.innerHTML=`<b>${fmt(r.Wto,0)}</b> <span style="color:${Math.abs(err)<=15?"#2f5d50":"#9c3024"}">${err>0?"+":""}${err.toFixed(1)}%</span>`;
+  });
+  S.config=save.config; S.layout=save.layout; S.category=save.category;
+  Object.assign(S.input, {WPL:save.WPL,V:save.V,R:save.R,h:save.h});
+  document.getElementById("vSum").innerHTML = n===0?"":
+    `<div class="note" style="margin-top:10px">
+       ${n} 架平均绝对偏差 <b>${fmt(sum/n,1)}%</b>，15% 内 ${ok15} 架。两架偏大的分别是空重分数曲线偏低
+       （PA-28）与商载率过低导致挑根偏离（King Air）——不是数据点异常。<br>
+       这是单点核对，不是适航意义上的验证；不要把 15% 当作合格线。</div>`;
+}
+function exportTxt(){
+  const r=S.result;
+  if(!r) return;
+  if(!r.valid) return alert("重量闭合无解，当前这套数字不是方案，不做导出。");
+  const L=["总体参数计算结果",
+    `动力=${DB.power[S.power].name}　布局=${DB.emptyFrac[dbKey()].name}　构型=${S.config}`,
+    "--------------------------------"];
+  for(const p of Object.values(r.p)) if(typeof p.v==="number")
+    L.push(`${p.sym}\t${p.name}\t${p.v.toPrecision(5)}\t${p.unit||""}\t${SRC_LABEL[p.src]}`);
+  const t=L.join("\n");
+  navigator.clipboard?.writeText(t).then(()=>alert("已复制 "+t.length+" 字符")).catch(()=>{
+    const w=window.open(""); w.document.write("<pre>"+t+"</pre>");});
+}
+
+function afterRender(){
+  if(S.step===3 && DB.emptyFrac[dbKey()]){
+    const fFe=fitCurve(DB.emptyFrac[dbKey()].points);
+    const fLd=fitCurve(DB.ld[dbKey()].points);
+    const c1=document.getElementById("cv_fE"), c2=document.getElementById("cv_LD");
+    if(c1) drawFit(c1,fFe,DB.emptyFrac[dbKey()]);
+    if(c2) drawFit(c2,fLd,DB.ld[dbKey()]);
+  }
+  if(S.step===4){
+    ["inPackV","inPackAh","inPackM","inPackA","inPackC"].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.addEventListener("input", updateBattHint);
+    });
+    updateBattHint();
+    const cv=document.getElementById("cvEng");
+    const P0=DB.power[S.power];
+    if(cv && P0.bsfcPts){
+      const f=fitCurve(P0.bsfcPts);
+      const w=cv.clientWidth||600, hh=parseInt(cv.style.height)||230;
+      const c=dpr(cv,w,hh), pad={l:58,r:14,t:14,b:30};
+      const xs=P0.bsfcPts.map(p=>Math.log10(p[0])), ys=P0.bsfcPts.map(p=>Math.log10(p[1]));
+      const x0=Math.min(...xs)-0.1, x1=Math.max(...xs)+0.1;
+      const y0=Math.min(...ys)-0.08, y1=Math.max(...ys)+0.08;
+      const X=v=>pad.l+(v-x0)/(x1-x0)*(w-pad.l-pad.r);
+      const Y=v=>hh-pad.b-(v-y0)/(y1-y0)*(hh-pad.t-pad.b);
+      c.clearRect(0,0,w,hh);
+      c.strokeStyle="#eee9e2"; c.font="10px Consolas"; c.fillStyle="#8a8f98";
+      for(let i=0;i<=4;i++){
+        const gx=x0+(x1-x0)*i/4, gy=y0+(y1-y0)*i/4;
+        c.beginPath();c.moveTo(X(gx),Y(y0));c.lineTo(X(gx),Y(y1));c.stroke();
+        c.beginPath();c.moveTo(X(x0),Y(gy));c.lineTo(X(x1),Y(gy));c.stroke();
+        c.textAlign="center"; c.fillText(Math.pow(10,gx).toFixed(0),X(gx),hh-10);
+        c.textAlign="right"; c.fillText(Math.pow(10,gy).toFixed(2),X(x0)-5,Y(gy)+3);
+      }
+      if(f.ok){
+        c.beginPath(); let first=true;
+        for(let i=0;i<=60;i++){
+          const p=Math.pow(10,x0+(x1-x0)*i/60), q=f.predict(p);
+          if(!isFinite(q.v)||q.v<=0) continue;
+          const yy=Y(Math.log10(q.v));
+          first?(c.moveTo(X(Math.log10(p)),yy),first=false):c.lineTo(X(Math.log10(p)),yy);
+        }
+        c.strokeStyle="#c05621"; c.lineWidth=2.2; c.stroke();
+      }
+      P0.bsfcPts.forEach(([px,py])=>{
+        c.beginPath();c.arc(X(Math.log10(px)),Y(Math.log10(py)),3.4,0,7);
+        c.fillStyle="#16324f";c.fill();c.strokeStyle="#fff";c.lineWidth=1.1;c.stroke();
+      });
+      c.fillStyle="#6b7280";c.font="11px 'Microsoft YaHei'";c.textAlign="center";
+      c.fillText("功率 [kW，对数轴]",w/2,hh-1);
+      c.save();c.translate(12,hh/2);c.rotate(-Math.PI/2);c.textAlign="center";
+      c.fillText("比油耗 [对数]",0,0);c.restore();
+    }
+  }
+  if(S.step===5 && S.result && S.result.valid){
+    const cv=document.getElementById("cvConv");
+    if(cv) drawConv(cv,S.result.iters);
+  }
+  if(S.step===7 && S.result && S.result.valid){
+    const cv=document.getElementById("cvCons");
+    if(cv){
+      const r=S.result;
+      const ws=parseFloat(document.getElementById("inWS").value);
+      const wp=parseFloat(document.getElementById("inWP").value);
+      drawConstraints(cv,r,ws,wp);
+      cv.onclick=e=>{
+        const rect=cv.getBoundingClientRect(), m=cv._map;
+        const ws2=Math.max(5,Math.min(60, m.x0+(e.clientX-rect.left-m.pad.l)/(m.W-m.pad.l-m.pad.r)*(m.x1-m.x0)));
+        const wp2=Math.max(2,Math.min(60, m.y0+(m.H-m.pad.b-(e.clientY-rect.top))/(m.H-m.pad.t-m.pad.b)*(m.y1-m.y0)));
+        document.getElementById("inWS").value=ws2.toFixed(1);
+        document.getElementById("rgWS").value=ws2.toFixed(1);
+        document.getElementById("inWP").value=wp2.toFixed(1);
+        document.getElementById("rgWP").value=wp2.toFixed(1);
+        setPt();
+      };
+      setPt();
+    }
+  }
+}
+
+document.getElementById("btnPrev").onclick=prevStep;
+document.getElementById("btnNext").onclick=nextStep;
+window.addEventListener("resize",()=>{if(S.step>=3)afterRender();});
+render();
+</script>
+</body>
+</html>

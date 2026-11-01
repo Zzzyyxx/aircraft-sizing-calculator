@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-飞机总体参数计算器 · 桌面版 v4.7
+飞机总体参数计算器 · 桌面版 v4.8
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
+v4.8：参考「联翼垂起无人机」的计算口径再优化——电池支持「按参数」与「用自己的电池包」二选一
+      （电压×容量→Wh、整包质量→比能量、电压×连续电流→比功率，比能量 >500 Wh/kg 拦下并提示检查 mAh），
+      多旋翼竖直爬升改用轴向动量理论（含诱导速度，Vc=0 时自动退回悬停 + 功率增量），
+      多解时在横幅里说明并列出其它根，提示不要当成唯一解；机载设备功率与过渡功率系数已可覆盖。
 v4.7：按源码审查整改——单位只换算一次、无解不再输出指标、迭代表改真实二分记录、
       能量剖面与重量闭合共用同一份数据、悬停功率去掉重复损失、极线按 L/D 反标定、验证改 9 架单点核对。
 v4.6：倾转旋翼按真实剖面建模——悬停只在起降与转换（悬停与过渡时间 1–2 min + 转换高度），
@@ -123,6 +127,7 @@ class Calculator:
         self.layout = tk.StringVar(value="normal")
         self.config = tk.StringVar(value="fixedwing")
         self.category = tk.StringVar(value="manned")
+        self.batt_mode = tk.StringVar(value="spec")   # spec = 按参数，pack = 用已有电池包
         self.vars: dict[str, tk.StringVar] = {}
         self.row_labels: dict[str, object] = {}
         self.row_hints: dict[str, object] = {}
@@ -492,21 +497,106 @@ class Calculator:
                                             sticky="w", pady=(8, 0))
 
     def _rebuild_special(self):
-        """动力/构型变化后，重画 ⑦ 里随动力类型变化的几行。"""
+        """动力类型或电池口径变化后，重画 ⑦ 里跟着变的那几行（保留已填的数值）。"""
+        keep = {k: v.get() for k, v in self.vars.items()
+                if k.startswith(("inEb", "inPb", "inDoD", "inPack",
+                                 "inBSFC", "inTaxi", "inDesc"))}
         for w in self.special_box.winfo_children():
             w.destroy()
         self.special_rows.clear()
+        self.batt_btns = {}
+        self.batt_cap = None
         if self.power.get() == "electric":
-            rows = [("inEb", "电池比能量 [Wh/kg]", "比如 180"),
-                    ("inPb", "电池比功率 [W/kg]", "比如 1000"),
-                    ("inDoD", "放电深度 DoD", "比如 0.85")]
+            self._build_battery_rows()
         else:
             rows = [("inBSFC", "BSFC [kg/(kW·h)]", "比如 0.30"),
                     ("inTaxi", "滑行燃油系数", "比如 0.06"),
                     ("inDesc", "下降燃油系数", "比如 0.03")]
-        for i, (key, label, hint) in enumerate(rows):
-            self._row(self.special_box, i, label, key, hint)
+            for i, (key, label, hint) in enumerate(rows):
+                self._row(self.special_box, i, label, key, hint)
+                self.special_rows[key] = i
+        self._silent = True
+        for k, val in keep.items():
+            if k in self.vars and val:
+                self.vars[k].set(val)
+        # 电池包几个常用格先给一套能跑通的例子，用户改成自己手上的数就行
+        for k, val in (("inPackV", "22.2"), ("inPackAh", "10"),
+                       ("inPackM", "1.3"), ("inPackC", "10")):
+            if k in self.vars and not self.vars[k].get().strip():
+                self.vars[k].set(val)
+        self._silent = False
+        self._update_batt_cap()
+
+    def _build_battery_rows(self):
+        """电池两种口径二选一：按参数，或者用手上已有的电池包换算。"""
+        sb = self.special_box
+
+        ttk.Label(sb, text="电池口径", style="Panel.TLabel").grid(
+            row=0, column=0, sticky="w", pady=3, padx=(0, 8))
+        sel = tk.Frame(sb, bg=BG)
+        sel.grid(row=0, column=1, columnspan=2, sticky="w", pady=3)
+
+        def render():
+            mode = self.batt_mode.get()
+            for k, b in self.batt_btns.items():
+                on = (k == mode)
+                b.configure(bg=ACCENT if on else BTN,
+                            fg="#ffffff" if on else FG,
+                            activebackground="#22456b" if on else BTN_HOVER,
+                            activeforeground="#ffffff" if on else FG)
+
+        for i, (val, txt) in enumerate((("spec", "按参数"), ("pack", "用我的电池包"))):
+            b = tk.Button(sel, text=txt, bd=0, relief="flat", cursor="hand2",
+                          font=self._font(12), padx=10, pady=4,
+                          command=lambda v=val: self._set_batt_mode(v))
+            b.pack(side="left", padx=(0, 6))
+            self.batt_btns[val] = b
+        render()
+
+        if self.batt_mode.get() == "spec":
+            rows = [("inEb", "电池比能量 [Wh/kg]", "比如 180"),
+                    ("inPb", "电池比功率 [W/kg]", "比如 1000"),
+                    ("inDoD", "可用比例 DoD", "比如 0.85")]
+        else:
+            rows = [("inPackV", "标称电压 [V]", "比如 22.2（6S）"),
+                    ("inPackAh", "额定容量 [Ah]", "比如 10 = 10000 mAh"),
+                    ("inPackM", "电池包质量 [kg]", "整包，含外壳"),
+                    ("inPackA", "连续放电电流 [A]", "和下面填一个"),
+                    ("inPackC", "连续放电倍率 [C]", "比如 10C"),
+                    ("inDoD", "可用比例 DoD", "比如 0.85")]
+        for i, (key, label, hint) in enumerate(rows, start=1):
+            self._row(sb, i, label, key, hint)
             self.special_rows[key] = i
+            if key.startswith("inPack"):
+                self.vars[key].trace_add("write", lambda *_: self._update_batt_cap())
+
+        if self.batt_mode.get() == "pack":
+            self.batt_cap = ttk.Label(sb, text="", style="Value.TLabel",
+                                      wraplength=int(430 * self.s), justify="left")
+            self.batt_cap.grid(row=len(rows) + 1, column=0, columnspan=3,
+                               sticky="w", pady=(6, 0))
+            ttk.Label(sb, text="比能量 = 电压×容量÷整包质量；比功率 = 电压×连续电流÷整包质量。",
+                      style="Hint.TLabel", wraplength=int(430 * self.s), justify="left").grid(
+                row=len(rows) + 2, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        self._update_batt_cap()
+
+    def _set_batt_mode(self, mode):
+        if self.batt_mode.get() == mode:
+            return
+        self.batt_mode.set(mode)
+        self._rebuild_special()
+        self._schedule()
+
+    def _update_batt_cap(self):
+        """电池包换算结果：算得出来就绿色显示，算不出来就红色说明哪里不对。"""
+        lb = getattr(self, "batt_cap", None)
+        if lb is None:
+            return
+        info = CC.battery_from_pack(self._num("inPackV"), self._num("inPackAh"),
+                                    self._num("inPackM"), self._num("inPackA"),
+                                    self._num("inPackC"))
+        lb.configure(text=info["msg"],
+                     foreground=OK_GREEN if info["ok"] else WARN_RED)
 
     # ------------------------------------------------------------ 右侧
     def _build_right(self, parent):
@@ -751,6 +841,8 @@ class Calculator:
                      "inTurn": "", "inSTO": "", "inSL": "", "inWind": "",
                      "inFE": "", "inLD": "", "inLDC": "",
                      "inEb": "", "inPb": "", "inDoD": "", "inBSFC": "", "inTaxi": "",
+                     "inPackV": "22.2", "inPackAh": "10", "inPackM": "1.3",
+                     "inPackA": "", "inPackC": "10",
                      "inDesc": ""}.items():
             if k in self.vars:
                 self._silent = True
@@ -835,11 +927,19 @@ class Calculator:
             "inSL": "SL", "inWind": "Vwind", "inFE": "fE", "inLD": "LD",
             "inLDC": "ldCruise", "inEb": "e_batt", "inPb": "p_batt",
             "inDoD": "DoD", "inBSFC": "bsfc", "inTaxi": "fTaxi", "inDesc": "fDescent",
+            "inPackV": "packV", "inPackAh": "packAh", "inPackM": "packMass",
+            "inPackA": "packA", "inPackC": "packC",
         }
         for k, dk in mapping.items():
             val = self._num(k)
             if val is not None:
                 des[dk] = val
+        if self.power.get() == "electric":
+            des["battMode"] = self.batt_mode.get()
+            if self.batt_mode.get() == "pack":
+                # 电池包口径下，比能量/比功率由包数据换算，不再吃手填值
+                des.pop("e_batt", None)
+                des.pop("p_batt", None)
         if vt:
             des.setdefault("NB", self._num("inNB", 6))
             des.setdefault("D", self._num("inDr", 0.9))
@@ -925,8 +1025,14 @@ class Calculator:
             if dl > 800:
                 notes.append("桨盘载荷 %.0f N/m² 偏高（直升机量级 300–600 N/m²），"
                              "悬停功率被放大；可加大桨径或减小载重" % dl)
+        if r["isElec"]:
+            if r.get("battMode") == "pack" and (r.get("battInfo") or {}).get("ok"):
+                base += "，电池包换算 %.1f Wh/kg" % (r.get("eBatt") or 0)
+            else:
+                base += "，电池 %.0f Wh/kg" % (r.get("eBatt") or 0)
         self.banner_note.configure(
-            text=("注意：" + "；".join(notes)) if notes else base)
+            text=base + ("　注意：" + "；".join(notes) if notes else ""))
+
 
         c = self.cards
         energy_lbl = "电池" if r["isElec"] else "燃油"

@@ -217,6 +217,60 @@ def db_key(cfg):
     return "normal_small_uav" if cfg.get("category") == "uav" else "normal_manned"
 
 
+def battery_from_pack(pack_v=None, pack_ah=None, pack_mass=None,
+                      pack_a=None, pack_c=None):
+    """把「手上已有的电池包」换算成比能量与比功率。
+
+    pack_v   标称电压 V
+    pack_ah  额定容量 Ah（界面上的 mAh 由调用方先换算）
+    pack_mass 电池包质量 kg（整包，含外壳与 BMS）
+    pack_a   连续放电电流 A   ┐ 二选一
+    pack_c   连续放电倍率 C   ┘
+
+    返回 {"ok", "msg", "wh", "e", "p", "current"}；ok=False 时 msg 说清哪里不对。
+    """
+    def num(v):
+        if v is None or v == "":
+            return None
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if isfinite(f) else None
+
+    v, ah, m = num(pack_v), num(pack_ah), num(pack_mass)
+    a, c = num(pack_a), num(pack_c)
+    out = {"ok": False, "msg": "", "wh": None, "e": None, "p": None, "current": None}
+
+    if not v or not ah or not m or v <= 0 or ah <= 0 or m <= 0:
+        out["msg"] = "标称电压、额定容量、电池包质量都要大于零"
+        return out
+    if a is not None and c is not None:
+        out["msg"] = "连续放电电流与连续放电倍率只填一项，避免两套数打架"
+        return out
+    if (a is not None and a <= 0) or (c is not None and c <= 0):
+        out["msg"] = "放电电流 / 倍率要大于零"
+        return out
+
+    wh = v * ah
+    e = wh / m
+    if e > 500:
+        out["msg"] = ("比能量 %.0f Wh/kg 超过 500，先检查容量单位：%g Ah 是不是该填 mAh？"
+                      "参数未应用" % (e, ah))
+        return out
+
+    cur = a if a is not None else (c * ah if c is not None else None)
+    out.update(ok=True, wh=wh, e=e, current=cur)
+    if cur is not None:
+        out["p"] = v * cur / m
+        out["msg"] = ("标称能量 %.0f Wh；比能量 %.1f Wh/kg；连续比功率 %.0f W/kg"
+                      % (wh, e, v * cur / m))
+    else:
+        out["msg"] = ("标称能量 %.0f Wh；比能量 %.1f Wh/kg；没填放电能力，"
+                      "比功率仍按参数或库值" % (wh, e))
+    return out
+
+
 def compute_core(cfg):
     """cfg = {power, layout, category, config, inp{WPL,V,R,h,tHover,Vc}, des{...}}"""
     I = cfg["inp"]
@@ -263,6 +317,27 @@ def compute_core(cfg):
     kTrans = 1.15 if O.get("kTrans") is None else float(O["kTrans"])
     pAux = 40.0 if O.get("P_aux") is None else float(O["P_aux"])
 
+    # ---- 电池两套口径二选一：
+    #      spec = 直接给比能量 / 比功率（库值或手填）
+    #      pack = 用手上已有的电池包（电压、容量、整包质量、放电能力）换算
+    battMode = O.get("battMode") or cfg.get("battMode") or "spec"
+    eBatt = O.get("e_batt") or P0.get("e_batt", 180)
+    pBatt = O.get("p_batt") or 1000
+    pBattSrc = "param"
+    battInfo = None
+    if is_elec and battMode == "pack":
+        battInfo = battery_from_pack(O.get("packV"), O.get("packAh"),
+                                     O.get("packMass"), O.get("packA"), O.get("packC"))
+        if battInfo["ok"]:
+            eBatt = battInfo["e"]
+            if battInfo["p"]:
+                pBatt = battInfo["p"]
+                pBattSrc = "pack"
+        else:
+            res["warn"].append("电池包数据没算出来（%s），比能量/比功率回落到参数值"
+                               % battInfo["msg"])
+    DoD = O.get("DoD") or 0.85
+
     # ---- 剖面时间：一次算好，能量、燃油、界面显示全部用它，不再各算一套
     tCr = I["R"] * 1000 / V if V > 0 else 0.0
     if is_tilt:
@@ -294,9 +369,15 @@ def compute_core(cfg):
         ph = (W ** 1.5 / math.sqrt(2 * rho * Arot) / FM / etaT) if is_vtol else 0.0
         pcr = W * V / (ld * etaP * etaT)
         pcl_inc = W * Vc / (etaP * etaT)
-        # 机翼模式爬升（固定翼 / 倾转旋翼转换之后）与直升机式垂直爬升（多旋翼）是两件事
+        # 机翼模式爬升（固定翼 / 倾转旋翼转换之后）与直升机式垂直爬升（多旋翼）是两件事。
+        # 垂直爬升用轴向动量理论：P = T(Vc/2 + √((Vc/2)² + T/(2ρA))) /（FM·η），
+        # 比「悬停功率 + W·Vc/η」更贴实际——后者在高爬升率下会高估。
+        if is_multi and Vc > 0 and ph > 0:
+            vi2 = W / (2 * rho * Arot)
+            pcl_vt = W * (Vc / 2.0 + math.sqrt(Vc * Vc / 4.0 + vi2)) / (FM * etaT)
+        else:
+            pcl_vt = ph + pcl_inc
         pcl_fwd = pcr + pcl_inc
-        pcl_vt = ph + pcl_inc
         pc = pcl_vt if is_multi else pcl_fwd
         ptr = ph * kTrans if is_vtol else 0.0
         if is_multi:
@@ -325,8 +406,8 @@ def compute_core(cfg):
         fuel = batt = ff = 0.0
         if is_elec:
             Et = E_task_Wh * (1 + reserve)
-            m1 = Et / ((O.get("DoD") or 0.85) * (O.get("e_batt") or P0.get("e_batt", 180)))
-            m2 = ppk / (O.get("p_batt") or 1000)
+            m1 = Et / (DoD * eBatt)
+            m2 = ppk / pBatt
             batt = max(m1, m2)
         else:
             bsfc = (O.get("bsfc") or P0["bsfc"]) / 3.6e6      # kg/J
@@ -419,6 +500,11 @@ def compute_core(cfg):
         target = 0.38 if (cfg["layout"] == "normal" and cfg.get("category") == "uav") else 0.22
         Wto = min(pool, key=lambda x: abs(WPL / x - target))
         solved = True
+        if len(roots) > 1:
+            res["warn"].append(
+                "发现 %d 个闭合解（%s kg），这里显示最接近典型载荷分数的那个；"
+                "多解本身说明假设或统计曲线不自洽，别把它当成唯一解"
+                % (len(roots), "、".join("%.1f" % x for x in roots[:5])))
         # 求解记录：把二分法真实的区间收缩过程记下来（不是围绕结果编的数字）
         idx = roots.index(Wto) if Wto in roots else 0
         a, b = brackets[idx]
@@ -469,6 +555,11 @@ def compute_core(cfg):
         "fuelSegs": fin["fsegs"], "Et": fin["Et"],
         "mBattE": fin["m1"], "mBattP": fin["m2"],
         "P_aux": pAux, "kTrans": kTrans,
+        "battMode": battMode, "battInfo": battInfo,
+        "eBatt": eBatt if is_elec else None,
+        "pBatt": pBatt if is_elec else None,
+        "pBattSrc": pBattSrc, "DoD": DoD if is_elec else None,
+        "rootsAll": roots,
         "tSeg": {"hover": tHov, "trans": tTrans, "climb": tClimb, "cruise": tCr},
     }
     r["constraints"] = build_constraints(r, cfg)
@@ -635,8 +726,29 @@ def build_params(res, cfg):
     add("W_E", "空重", res["WE"], "kg", "calc", "空重 = 空重分数 × 起飞总重",
         "W_E = f_E·W_TO", ["f_E", "W_TO"])
     if res["isElec"]:
+        if res.get("battMode") == "pack" and (res.get("battInfo") or {}).get("ok"):
+            bi = res["battInfo"]
+            add("E_pack", "电池包标称能量", bi["wh"], "Wh", "calc",
+                "标称电压 × 额定容量", "E_pack = V·Ah")
+            add("e_batt", "电池比能量", bi["e"], "Wh/kg", "calc",
+                "电池包标称能量 ÷ 整包质量（含外壳与 BMS）", "e = E_pack/m_pack")
+            if bi.get("p"):
+                add("p_batt", "电池比功率", bi["p"], "W/kg", "calc",
+                    "标称电压 × 连续放电电流 ÷ 整包质量", "P/m = V·I/m_pack")
+            else:
+                add("p_batt", "电池比功率", res.get("pBatt") or 0, "W/kg", "assume",
+                    "没填放电能力，比功率取设计参数或库值")
+        else:
+            add("e_batt", "电池比能量", res.get("eBatt") or 0, "Wh/kg", "stat",
+                "参数口径：直接给电池包比能量")
+            add("p_batt", "电池比功率", res.get("pBatt") or 0, "W/kg", "stat",
+                "参数口径：直接给电池包比功率")
+        add("DoD", "电池可用比例", res.get("DoD") or 0.85, "—", "assume",
+            "可用电量 ÷ 标称电量，任务策略而非电池指标")
         add("m_batt", "电池质量", res["mBatt"], "kg", "calc",
-            "能量管航程，功率管 2C", "m_batt = max(E/(DoD·e), P_peak/(P/m))", ["P_peak"])
+            "能量约束（含储备）与功率约束取大",
+            "m_batt = max(E_task(1+r)/(DoD·e), P_peak/(P/m))", ["P_peak"])
+
     else:
         add("W_fuel", "燃油重量", res["Wfuel"], "kg", "calc",
             "各段燃油求和（Breguet + 爬升 + 滑行 + 备份）", "W_fuel = Σ各段", ["W_TO"])
@@ -659,7 +771,8 @@ def build_params(res, cfg):
             "P_trans = %.2f×P_hover" % res.get("kTrans", 1.15), ["P_hover"])
         if res.get("isMulti"):
             add("P_climb", "垂直爬升功率", res["Pcl"], "W", "calc",
-                "悬停功率 + 竖直爬升增量", "P_climb = P_hover + W·V_c/η", ["P_hover"])
+                "轴向动量理论：T(V_c/2 + √((V_c/2)² + T/(2ρA)))，再除 FM 与传动效率",
+                "P_climb = T(V_c/2+√((V_c/2)²+vi²))/(FM·η_trans)", ["P_hover"])
         else:
             add("P_climb", "机翼模式爬升功率", res["Pcl"], "W", "calc",
                 "转换完成后由机翼承重，按固定翼爬升算", "P_climb = P_cruise + W·V_c/η", ["P_cruise"])
