@@ -1,9 +1,9 @@
 ﻿# -*- coding: utf-8 -*-
 """
-飞机总体参数计算器 · 桌面版 v4.3
+飞机总体参数计算器 · 桌面版 v4.4
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
-v4.3：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图
+v4.4：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图与样本点表、可导出全部样本 CSV
 运行：python aircraft_sizing_calculator.py
 依赖：Python 3.9+（仅标准库 tkinter），计算内核见同目录 calc_core.py
 """
@@ -627,6 +627,8 @@ class Calculator:
                   style="Muted.TLabel").pack(side="left")
         ttk.Button(head, text="跑一遍 9 架实机验证",
                    command=self._run_verify).pack(side="right")
+        ttk.Button(head, text="导出全部样本 CSV",
+                   command=self._export_samples).pack(side="right", padx=(0, 8))
 
         # ---------------------------------------------------- 拟合曲线图
         self.fit_kind = "fE"
@@ -645,10 +647,27 @@ class Calculator:
         self.fit_cap = ttk.Label(card, text="", style="CardName.TLabel",
                                  wraplength=820, justify="left")
         self.fit_cap.pack(anchor="w", padx=10, pady=(4, 0))
-        self.fit_cv = tk.Canvas(card, bg=CANVAS_BG, highlightthickness=0,
-                                height=int(228 * self.s))
-        self.fit_cv.pack(fill="x", padx=10, pady=(4, 10))
+
+        bodyf = tk.Frame(card, bg=CARD)
+        bodyf.pack(fill="x", padx=10, pady=(4, 10))
+        self.fit_cv = tk.Canvas(bodyf, bg=CANVAS_BG, highlightthickness=0,
+                                height=int(232 * self.s), width=int(580 * self.s))
+        self.fit_cv.pack(side="left", fill="both", expand=True)
         self.fit_cv.bind("<Configure>", lambda e: self._draw_fit())
+
+        # 右侧：样本点表（与曲线同源，切换曲线时同步换表）
+        side = ttk.Frame(bodyf)
+        side.pack(side="right", fill="y", padx=(10, 0))
+        self.ptree = ttk.Treeview(side, columns=("x", "y"), show="headings",
+                                  height=7)
+        self.ptree.heading("x", text="总重 [kg]")
+        self.ptree.heading("y", text="数值")
+        self.ptree.column("x", width=126, anchor="e")
+        self.ptree.column("y", width=126, anchor="e")
+        psb = ttk.Scrollbar(side, orient="vertical", command=self.ptree.yview)
+        self.ptree.configure(yscrollcommand=psb.set)
+        self.ptree.pack(side="left", fill="both", expand=True)
+        psb.pack(side="right", fill="y")
 
         self.fit_label = ttk.Label(p, text="", style="Mono.TLabel",
                                    background=PANEL, justify="left",
@@ -902,18 +921,69 @@ class Calculator:
     # ---- 拟合曲线图（空重分数 / 升阻比 / 比油耗 / 功重比）
     FIT_DEF = {
         "fE":   dict(box="emptyFrac", xlabel="起飞总重 W_TO [kg]", ylabel="空重分数 f_E",
-                     unit="", fmt="{:.3f}"),
+                     xh="起飞总重 [kg]", yh="空重分数 f_E", unit="", fmt="{:.3f}"),
         "ld":   dict(box="ld", xlabel="起飞总重 W_TO [kg]", ylabel="升阻比 L/D",
-                     unit="", fmt="{:.2f}"),
+                     xh="起飞总重 [kg]", yh="升阻比 L/D", unit="", fmt="{:.2f}"),
         "bsfc": dict(box="power", xlabel="配平功率 [kW]", ylabel="比油耗 BSFC [kg/(kW·h)]",
-                     unit=" kg/(kW·h)", fmt="{:.3f}"),
+                     xh="配平功率 [kW]", yh="BSFC [kg/(kW·h)]", unit=" kg/(kW·h)",
+                     fmt="{:.3f}"),
         "pw":   dict(box="power", xlabel="配平功率 [kW]", ylabel="功重比 P/m [kW/kg]",
-                     unit=" kW/kg", fmt="{:.2f}"),
+                     xh="配平功率 [kW]", yh="P/m [kW/kg]", unit=" kW/kg", fmt="{:.2f}"),
     }
 
     def _fit_set_kind(self, kind):
         self.fit_kind = kind
         self._draw_fit()
+
+    def _fill_points(self, pts, meta):
+        """把当前曲线的样本点填进右侧表格。"""
+        tv = getattr(self, "ptree", None)
+        if tv is None:
+            return
+        tv.heading("x", text=meta.get("xh", "横轴"))
+        tv.heading("y", text=meta.get("yh", "数值"))
+        tv.delete(*tv.get_children())
+        clean = sorted([p for p in pts if p[0] > 0 and p[1] > 0],
+                       key=lambda p: p[0])
+        for (x, y) in clean:
+            tv.insert("", "end", values=(_vfmt(x), meta["fmt"].format(y)))
+
+    def _export_samples(self):
+        """把全部统计库的样本点导出成一张长表。"""
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv", filetypes=[("CSV", "*.csv")],
+            initialfile="样本点_%s.csv" % datetime.now().strftime("%m%d_%H%M"))
+        if not path:
+            return
+        grade = {"A": "实测", "B": "公开规格", "C": "样本有限"}
+        rows = []
+        for key in ("normal_small_uav", "normal_manned", "canard",
+                    "flyingwing", "joined"):
+            e = CC.DB["emptyFrac"].get(key) or {}
+            if not e:
+                continue
+            nm = e.get("name", key)
+            g = grade.get(e.get("grade", "?"), "—")
+            src = e.get("src", "")
+            for x, y in sorted(e.get("points") or [], key=lambda p: p[0]):
+                rows.append([nm, g, "空重分数 f_E", "%.1f" % x, "%.3f" % y, src])
+            for x, y in sorted((CC.DB["ld"].get(key) or {}).get("points") or [],
+                               key=lambda p: p[0]):
+                rows.append([nm, g, "升阻比 L/D", "%.1f" % x, "%.2f" % y, src])
+        for pk, d in CC.DB["power"].items():
+            nm = d.get("name", pk)
+            g = grade.get(d.get("grade", "?"), "—")
+            src = d.get("src", "")
+            for x, y in d.get("bsfcPts") or []:
+                rows.append([nm, g, "比油耗 BSFC", "%.0f" % x, "%.3f" % y, src])
+            for x, y in d.get("pwPts") or []:
+                rows.append([nm, g, "功重比 P/m", "%.0f" % x, "%.2f" % y, src])
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            wr = csv.writer(f)
+            wr.writerow(["库 / Library", "等级", "指标 / Metric", "横轴值",
+                         "纵轴值", "来源 / Source"])
+            wr.writerows(rows)
+        messagebox.showinfo(APP_TITLE, "已导出 %d 行样本点。\n%s" % (len(rows), path))
 
     def _fit_series(self):
         """返回 (points, meta, 当前设计值 x, 当前设计值 y)"""
@@ -959,6 +1029,7 @@ class Calculator:
                         activeforeground="#ffffff" if on else FG)
 
         pts, meta, xnow, ynow = self._fit_series()
+        self._fill_points(pts, meta)
         cv.update_idletasks()
         w = cv.winfo_width() or 800
         h = cv.winfo_height() or 228
