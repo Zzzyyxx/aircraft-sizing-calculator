@@ -1,9 +1,9 @@
 ﻿# -*- coding: utf-8 -*-
 """
-飞机总体参数计算器 · 桌面版 v4.4
+飞机总体参数计算器 · 桌面版 v4.5
 三环收敛：重量—能量环 → 功率—翼载约束环 → 升力系数下推
 
-v4.4：左栏加宽（470 px）、输入指引换成暖褐灰并放大、样本页签补统计曲线图与样本点表、可导出全部样本 CSV
+v4.5：左栏加宽（470 px）、输入指引加实、样本页签补统计曲线图 + 样本点表、随程序附带分表排列的样本表 Excel
 运行：python aircraft_sizing_calculator.py
 依赖：Python 3.9+（仅标准库 tkinter），计算内核见同目录 calc_core.py
 """
@@ -627,6 +627,8 @@ class Calculator:
                   style="Muted.TLabel").pack(side="left")
         ttk.Button(head, text="跑一遍 9 架实机验证",
                    command=self._run_verify).pack(side="right")
+        ttk.Button(head, text="打开样本表 Excel",
+                   command=self._open_samples_xlsx).pack(side="right", padx=(0, 8))
         ttk.Button(head, text="导出全部样本 CSV",
                    command=self._export_samples).pack(side="right", padx=(0, 8))
 
@@ -947,6 +949,25 @@ class Calculator:
                        key=lambda p: p[0])
         for (x, y) in clean:
             tv.insert("", "end", values=(_vfmt(x), meta["fmt"].format(y)))
+
+    def _open_samples_xlsx(self):
+        """打开随程序附带的样本点工作簿（分表排列的空重分数 / 升阻比 / 比油耗 / 功重比 / 九机验证 / 汇总）。"""
+        here = os.path.dirname(os.path.abspath(__file__))
+        for rel in ("样本点数据.xlsx", os.path.join("data", "sample_points.xlsx"),
+                    os.path.join("data", "样本点数据.xlsx"),
+                    "sample_points.xlsx"):
+            p = os.path.join(here, rel)
+            if os.path.exists(p):
+                try:
+                    os.startfile(p)                      # noqa: S606 (Windows)
+                except Exception as exc:                 # noqa: BLE001
+                    messagebox.showerror(APP_TITLE, "打不开：%s\n%s" % (p, exc))
+                return
+        messagebox.showinfo(
+            APP_TITLE,
+            "同目录没找到 样本点数据.xlsx。\n\n"
+            "可以用下面的命令重新生成（需要 openpyxl，主程序本身不依赖）：\n"
+            "    python tools/export_samples.py")
 
     def _export_samples(self):
         """把全部统计库的样本点导出成一张长表。"""

@@ -297,8 +297,29 @@ Mean absolute error 7.4%; 7 of 9 within 15%.
 | `install_environment.bat` | 缺 Python 时自动安装并复检 / one-click setup |
 | `tools/env_check.py` | 自检逻辑：版本、tkinter、文件、内核算例 / check logic |
 | `tools/env_setup.py` | 修复建议 + 通过后启动计算器 / repair hints and launch |
+| `tools/export_samples.py` | 重新生成样本点工作簿（需 `openpyxl`，主程序不依赖） / regenerate the sample workbook |
+| `data/sample_points.xlsx` | 样本点数据表：七张分表，分门别类 / the sample workbook, seven sheets |
 | `docs/` | 界面截图 / screenshots |
 | `README.md` | 本说明 / this manual |
+
+### 样本点数据表 / Sample workbook
+
+`data/sample_points.xlsx` 把统计曲线背后的每一个样本点分门别类列出来，程序里「样本与验证」页签
+的 **打开样本表 Excel** 按钮直接打开它。七张分表：
+
+| 分表 | 内容 | 行数 |
+|---|---|---|
+| `0 说明` | 索引、口径提示、每个库的覆盖范围 | 索引 |
+| `1 空重分数 fE` | 五个布局库的空重分数点（含等级与来源） | 130 |
+| `2 升阻比 LD` | 五个布局库的升阻比点 | 129 |
+| `3 比油耗 BSFC` | 四种动力的比油耗点 | 19 |
+| `4 功重比 Pm` | 活塞 / 涡桨 / 涡扇的功率重量比点 | 19 |
+| `5 九机验证` | 九架实机的商载、真实总重、算出总重与偏差 | 9 |
+| `6 汇总` | 每个库的点数、量程与拟合方式 | 7 |
+
+The workbook lists every sample point behind the statistical curves, grouped into seven sheets.
+The **Open sample workbook** button in the *Samples & Validation* tab opens it directly.
+需要重算时 / to regenerate：`python tools/export_samples.py`（需 `openpyxl`）。
 
 导出文件 / Exports：JSON（完整结果与溯源）、CSV（迭代表与验证表），保存在当前目录。
 JSON (full result plus traceability) and CSV (iteration and verification tables) are written to the working directory.
